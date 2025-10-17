@@ -525,6 +525,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
                 c->h1->connKeepAlive = false;
             c->h1->resp.resp_status = -c->err;
             c->err = 0;
+            c->h1->hdrs.clear();
             if (send_message(c, NULL) == 0)
                 return;
         }

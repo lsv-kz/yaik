@@ -236,22 +236,15 @@ public:
 
     int set_offset(int n)
     {
-        if (n < 0)
+        if (((offset + n) < 0) || ((offset + n) > buf_len))
         {
-            fprintf(stderr, "<%s:%d> n=%d\n", __func__, __LINE__, n);
+            fprintf(stderr, "<%s:%d> Error new offset=%d, buf_len=%d\n", __func__, __LINE__, offset + n, buf_len);
             return -1;
         }
         else if (n == 0)
         {
             fprintf(stderr, "<%s:%d> n=%d\n", __func__, __LINE__, n);
             return offset;
-        }
-
-        if ((offset + n) > buf_len)
-        {
-            fprintf(stderr, "<%s:%d> (offset + n) > buf_len\n", __func__, __LINE__);
-            offset = buf_len;
-            return -1;
         }
 
         offset += n;

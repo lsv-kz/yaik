@@ -351,6 +351,7 @@ class EventHandlerClass
     int cgi_fork(Connect *c, Stream *r, int* serv_cgi, int* cgi_serv);
     int cgi_stdin(Stream *r, int fd);
     int cgi_stdout(Stream *r, int fd);
+    void cgi_headers_parse(Connect *c);
 
     void cgi_worker(Connect *c, struct pollfd *poll_fd);
     int cgi_stdout(Connect *c, int fd);
