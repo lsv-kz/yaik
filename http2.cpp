@@ -290,27 +290,15 @@ int set_response(Connect *con, Stream *resp)
 {
     resp->send_bytes = 0;
     decode(resp->path.c_str(), resp->path.size(), resp->decode_path);
-    //--------------------------
-    const char *p = strchr(resp->path.c_str(), '?');
-    if (p)
-        resp->query_string = p + 1;
-    else
-        resp->query_string = "";
 
-    int len = 0;
-    p = strchr(resp->decode_path.c_str(), '?');
-    if (p)
-        len = p - resp->decode_path.c_str();
-    else
-        len = resp->decode_path.size();
-
+    int len = resp->decode_path.size();
     if (len >= resp->clean_decode_path_size)
     {
         if (resp->clean_decode_path)
         {
-            print_err(resp, "<%s:%d> Error: clean_decode_path != NULL, id=%d \n", __func__, __LINE__, resp->id);
-            resp_500(resp);
-            return 0;
+            delete [] resp->clean_decode_path;
+            resp->clean_decode_path = NULL;
+            resp->clean_decode_path_size = 0;
         }
 
         resp->clean_decode_path = new(nothrow) char [len + 1];
@@ -324,8 +312,32 @@ int set_response(Connect *con, Stream *resp)
         resp->clean_decode_path_size = len + 1;
     }
 
+    const char *p = strchr(resp->path.c_str(), '?');
+    if (p)
+        resp->query_string = p + 1;
+    else
+        resp->query_string = "";
+
     memcpy(resp->clean_decode_path, resp->decode_path.c_str(), len);
     resp->clean_decode_path[len] = 0;
+    p = (const char*)memchr(resp->clean_decode_path, '?', len);
+    if (p)
+    {
+        len = p - resp->clean_decode_path;
+        resp->decode_query_string = p + 1;
+        resp->clean_decode_path[len] = 0;
+    }
+    else
+    {
+        resp->decode_query_string = NULL;
+        if (resp->query_string.size() > 0)
+        {
+            print_err(resp, "<%s:%d> Error ?\n", __func__, __LINE__);
+            resp_500(resp);
+            return 0;
+        }
+    }
+
     int err = clean_path(resp->clean_decode_path, len);
     if (err <= 0)
     {

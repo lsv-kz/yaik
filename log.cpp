@@ -95,7 +95,7 @@ mtxLog.unlock();
 void print_err(Connect *con, const char *format, ...)
 {
     va_list ap;
-    char buf[1024];
+    char buf[2048];
 
     if (!con)
         return;
@@ -103,7 +103,7 @@ void print_err(Connect *con, const char *format, ...)
     va_start(ap, format);
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
-    String ss(1024);
+    String ss(2048);
     ss << "[" << log_time() << "] - [" << con->numConn << "/" << con->numReq << "] " << buf;
 
 mtxLog.lock();
@@ -172,8 +172,11 @@ void print_log(Connect *c, Stream *resp)
         return;
 
     ss  << resp->numConn << "/" << resp->numReq << " - " << c->remoteAddr << " - [" << log_time()
-        << "] - \"" << get_str_method(resp->httpMethod) << " " << resp->decode_path.c_str() << " HTTP/2\" - "
-        << resp->resp_status << " " << resp->send_bytes << " - \"" << resp->user_agent << "\" - id=" << resp->id << " \n";
+        << "] - \"" << get_str_method(resp->httpMethod) << " " << resp->clean_decode_path;
+    if (resp->decode_query_string)
+        ss << "?" << resp->decode_query_string;
+    ss << " HTTP/2\" " << resp->resp_status << " " << resp->send_bytes
+        << " \"" << resp->referer << "\" \"" << resp->user_agent << "\" - id=" << resp->id << " \n";
 
 mtxLog.lock();
     write(flog, ss.c_str(), ss.size());
@@ -198,8 +201,8 @@ void print_log(Connect *c)
 
     ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << " - [" << log_time()
         << "] \"" << get_str_method(c->h1->resp.httpMethod) << " " << c->h1->resp.clean_decode_path;
-    if (c->h1->resp.query_string.size())
-        ss << "?" << c->h1->resp.query_string.c_str();
+    if (c->h1->resp.decode_query_string)
+        ss << "?" << c->h1->resp.decode_query_string;
     ss << " HTTP/1.1\" " << c->h1->resp.resp_status << " " << c->h1->resp.send_bytes
         << " \"" << c->h1->resp.referer << "\" \"" << c->h1->resp.user_agent << "\"\n";
 

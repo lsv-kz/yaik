@@ -55,19 +55,8 @@ int set_response(Connect *c)
     if ((c->numReq >= (unsigned int)conf->MaxRequestsPerClient) || (conf->TimeoutKeepAlive == 0))
         c->h1->connKeepAlive = false;
     decode(c->h1->resp.path.c_str(), c->h1->resp.path.size(), c->h1->resp.decode_path);
-    const char *p = strchr(c->h1->resp.path.c_str(), '?');
-    if (p)
-        c->h1->resp.query_string = p + 1;
-    else
-        c->h1->resp.query_string = "";
 
-    int len = 0;
-    p = strchr(c->h1->resp.decode_path.c_str(), '?');
-    if (p)
-        len = p - c->h1->resp.decode_path.c_str();
-    else
-        len = c->h1->resp.decode_path.size();
-
+    int len = c->h1->resp.decode_path.size();
     if (len >= c->h1->resp.clean_decode_path_size)
     {
         if (c->h1->resp.clean_decode_path)
@@ -87,8 +76,30 @@ int set_response(Connect *c)
         c->h1->resp.clean_decode_path_size = len + 1;
     }
 
+    const char *p = strchr(c->h1->resp.path.c_str(), '?');
+    if (p)
+        c->h1->resp.query_string = p + 1;
+    else
+        c->h1->resp.query_string = "";
+
     memcpy(c->h1->resp.clean_decode_path, c->h1->resp.decode_path.c_str(), len);
     c->h1->resp.clean_decode_path[len] = 0;
+    p = (const char*)memchr(c->h1->resp.clean_decode_path, '?', len);
+    if (p)
+    {
+        c->h1->resp.decode_query_string = p + 1;
+        len = p - c->h1->resp.clean_decode_path;
+        c->h1->resp.clean_decode_path[len] = 0;
+    }
+    else
+    {
+        c->h1->resp.decode_query_string = NULL;
+        if (c->h1->resp.query_string.size() > 0)
+        {
+            print_err(c, "<%s:%d> Error ?\n", __func__, __LINE__);
+            return -RS500;
+        }
+    }
 
     int err = clean_path(c->h1->resp.clean_decode_path, len);
     if (err <= 0)

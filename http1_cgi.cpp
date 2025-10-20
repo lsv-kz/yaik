@@ -236,7 +236,7 @@ void EventHandlerClass::cgi_worker(Connect *con, struct pollfd *poll_fd)
                         char s[] = "0\r\n\r\n";
                         con->h1->resp.send_data.cat_str(s);
                     }
-    
+
                     if (con->h1->resp.send_data.size() == 0)
                     {
                         http1_end_request(con);
@@ -394,7 +394,7 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
             {
                 c->h1->hdrs << s << "\r\n";
             }
-            
+
             header_len = -1;
         }
         else if (ch != '\r')

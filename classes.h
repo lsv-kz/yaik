@@ -165,7 +165,10 @@ struct Stream
 
     std::string path;
     std::string decode_path;
+
     std::string query_string;
+    const char *decode_query_string;
+
     char *clean_decode_path;
     int clean_decode_path_size;
 
@@ -291,17 +294,16 @@ struct Stream
         ++numReq;
         path.clear();
         decode_path.clear();
+        decode_query_string = NULL;
         host.clear();
-        user_agent = "-";
-        referer = "-";
+        user_agent.clear();
+        referer.clear();
         range.clear();
 
         buf.init();
         send_data.init();
         post_data.init();
         headers.init();
-        send_data.init();
-        post_data.init();
 
         httpMethod = M_NULL;
         sReqContentType.clear();
@@ -331,7 +333,6 @@ struct Stream
         cgi.fd = cgi.to_script = cgi.from_script = -1;
         cgi.fcgi_type = 0;
         cgi.fcgiContentLen = cgi.fcgiPaddingLen = 0;
-        
     }
 
 private:
