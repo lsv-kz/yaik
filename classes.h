@@ -172,7 +172,6 @@ struct Stream
     char *clean_decode_path;
     int clean_decode_path_size;
 
-    std::string authority;
     std::string host;
     std::string user_agent;
     std::string referer;

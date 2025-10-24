@@ -137,8 +137,6 @@ struct http2
 
     bool ack_recv;
     bool try_again;
-
-    int num_cgi;
     //----------------------
     void init()
     {
@@ -316,6 +314,7 @@ class EventHandlerClass
 
     Connect **conn_array;
     struct pollfd *poll_fd;
+    Stream **cgi_array;
 
     Connect *work_list_start;
     Connect *work_list_end;
@@ -346,30 +345,30 @@ class EventHandlerClass
     int send_frame_ping(Connect *c);
     int send_frame_rststream(Connect *c);
 
-    void cgi_worker(Connect *c, Stream *r, struct pollfd *p);
+    void cgi_worker(Connect *c, Stream *r, int i);
     int cgi_create_proc(Connect *c, Stream *r);
     int cgi_fork(Connect *c, Stream *r, int* serv_cgi, int* cgi_serv);
     int cgi_stdin(Stream *r, int fd);
     int cgi_stdout(Stream *r, int fd);
     void cgi_headers_parse(Connect *c);
 
-    void cgi_worker(Connect *c, struct pollfd *poll_fd);
+    void cgi_worker(Connect *c, int i);
     int cgi_stdout(Connect *c, int fd);
 
-    void scgi_worker(Connect* c, Stream *r, struct pollfd *p);
-    void scgi_worker(Connect* c, struct pollfd *poll_fd);
+    void scgi_worker(Connect* c, Stream *r, int i);
+    void scgi_worker(Connect* c, int i);
 
-    void fcgi_worker(Connect* c, Stream *r, struct pollfd *p);
-    void fcgi_worker(Connect *c, struct pollfd *poll_fd);
+    void fcgi_worker(Connect* c, Stream *r, int i);
+    void fcgi_worker(Connect *c, int i);
     void fcgi_get_headers(Connect* con, Stream *r);
     void fcgi_get_headers(Connect *resp);
 
     void http1_end_request(Connect *c);
 
-    void http2_cgi_set(Connect *c, int *);
-    void http2_cgi_poll(Connect *c, int *);
-    void http1_cgi_set(Connect *c, int *);
-    void http1_cgi_poll(Connect *c, int *);
+    void http2_cgi_set(Connect *c);
+    void http2_cgi_poll(Connect *c, int);
+    void http1_cgi_set(Connect *c);
+    void http1_cgi_poll(Connect *c, int);
 
 public:
 
@@ -420,8 +419,6 @@ int create_response_headers(Connect *c);
 int read_post_data(Connect *c);
 //------------------------ http1_cgi.cpp -------------------------------
 int cgi_set_size_chunk(ByteArray *ba);
-//------------------------ http1_fcgi.cpp ------------------------------
-int fcgi_create_connect(Connect *c);
 //------------------------ http1_scgi.cpp ------------------------------
 int scgi_create_connect(Connect *c);
 //------------------------ http2_cgi.cpp -------------------------------

@@ -6,42 +6,6 @@ static int read_request_headers(Connect *c);
 static int send_message(Connect *c, const char *msg);
 static const char *http1_status_response(int st);
 //======================================================================
-static int is_cgi(Connect* c, const char* uri)
-{
-    const char *p = strrchr(uri, '/');
-    if (!p)
-        return -RS404;
-    fcgi_list_addr *i = conf->fcgi_list;
-    for (; i; i = i->next)
-    {
-        if (i->script_name[0] == '~')
-        {
-            if (!strcmp(p, i->script_name.c_str() + 1))
-                break;
-        }
-        else
-        {
-            if (uri == i->script_name)
-                break;
-        }
-    }
-
-    if (!i)
-        return -RS404;
-
-    c->h1->resp.cgi.socket = &i->addr;
-    if (i->type == FASTCGI)
-        c->h1->resp.cgi_type = FASTCGI;
-    else if (i->type == SCGI)
-        c->h1->resp.cgi_type = SCGI;
-    else
-        return -RS404;
-    c->h1->resp.cgi.scriptName = i->script_name;
-    c->h1->resp.source_data = DYN_PAGE;
-    c->h1->resp.resp_status = RS200;
-    return 0;
-}
-//======================================================================
 int set_response(Connect *c)
 {
     if ((c->h1->resp.httpMethod != M_GET) &&
@@ -145,14 +109,12 @@ int set_response(Connect *c)
     {
         if (errno == EACCES)
             return -RS403;
-        ret = is_cgi(c, c->h1->resp.clean_decode_path);
+        ret = is_cgi(&c->h1->resp);
         if (ret < 0)
             return -RS404;
         else
         {
             c->h1->resp.cgi_status = CGI_CREATE;
-            c->h1->resp.cgi.scriptName = c->h1->resp.clean_decode_path;
-            c->h1->resp.source_data = DYN_PAGE;
             return 0;
         }
     }

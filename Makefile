@@ -12,10 +12,9 @@ DEPS = main.h string__.h classes.h bytes_array.h
 OBJS = $(OBJSDIR)/yaik.o \
 	$(OBJSDIR)/huffman_code.o \
 	$(OBJSDIR)/http1_cgi.o \
-	$(OBJSDIR)/http1_scgi.o \
 	$(OBJSDIR)/http1_fcgi.o \
 	$(OBJSDIR)/http2_cgi.o \
-	$(OBJSDIR)/http2_scgi.o \
+	$(OBJSDIR)/scgi.o \
 	$(OBJSDIR)/http2_fcgi.o \
 	$(OBJSDIR)/http1.o \
 	$(OBJSDIR)/http2.o \
@@ -48,17 +47,14 @@ $(OBJSDIR)/http2_fcgi.o: http2_fcgi.cpp $(DEPS)
 $(OBJSDIR)/ssl.o: ssl.cpp $(DEPS)
 	$(CC) $(CFLAGS) -c ssl.cpp -o $@
 
-$(OBJSDIR)/http2_scgi.o: http2_scgi.cpp $(DEPS)
-	$(CC) $(CFLAGS) -c http2_scgi.cpp -o $@
+$(OBJSDIR)/scgi.o: scgi.cpp $(DEPS)
+	$(CC) $(CFLAGS) -c scgi.cpp -o $@
 
 $(OBJSDIR)/http2_cgi.o: http2_cgi.cpp $(DEPS)
 	$(CC) $(CFLAGS) -c http2_cgi.cpp -o $@
 
 $(OBJSDIR)/http1_cgi.o: http1_cgi.cpp $(DEPS)
 	$(CC) $(CFLAGS) -c http1_cgi.cpp -o $@
-
-$(OBJSDIR)/http1_scgi.o: http1_scgi.cpp $(DEPS)
-	$(CC) $(CFLAGS) -c http1_scgi.cpp -o $@
 
 $(OBJSDIR)/config.o: config.cpp  $(DEPS)
 	$(CC) $(CFLAGS) -c config.cpp -o $@

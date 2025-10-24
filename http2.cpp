@@ -371,13 +371,13 @@ int set_response(Connect *con, Stream *resp)
     }
     //-------------------------------
     string path = ".";
-    if (!strncmp(resp->decode_path.c_str(), "/cgi-bin/", 9))
+    if (!strncmp(resp->clean_decode_path, "/cgi-bin/", 9) || !strncmp(resp->clean_decode_path, "/cgi/", 5))
     {
         resp->source_data = DYN_PAGE;
         resp->cgi_type = CGI;
         resp->cgi.scriptName = resp->clean_decode_path;
     }
-    else if (strstr(resp->decode_path.c_str(), ".php"))
+    else if (strstr(resp->clean_decode_path, ".php"))
     {
         resp->source_data = DYN_PAGE;
         resp->cgi.scriptName = resp->clean_decode_path;
@@ -528,16 +528,15 @@ int set_response(Connect *con, Stream *resp)
     }
     else
     {
-        if (is_cgi(resp))
-        {
-            resp->send_data.init();
-            resp->cgi_status = CGI_CREATE;
-            resp->resp_status = RS200;
-        }
-        else
+        if (is_cgi(resp) < 0)
         {
             print_err(resp, "<%s:%d> Error: CONTENT_TYPE %s, create_headers=%d, send_headers=%d\n", __func__, __LINE__, path.c_str(), resp->create_headers, resp->send_headers);
             resp_404(resp);
+        }
+        else
+        {
+            resp->send_data.init();
+            resp->cgi_status = CGI_CREATE;
         }
     }
 

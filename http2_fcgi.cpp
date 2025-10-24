@@ -142,7 +142,10 @@ int fcgi_create_params(Connect *c, Stream *resp)
     ++i;
 
     param.name = "SERVER_PROTOCOL";
-    param.val = "HTTP/2.0";
+    if (c->Protocol == P_HTTP2)
+        param.val = "HTTP/2.0";
+    else
+        param.val = "HTTP/1.1";
     resp->cgi.vPar.push_back(param);
     ++i;
 
@@ -270,10 +273,11 @@ int fcgi_create_connect(Connect *con, Stream *resp)
     return 0;
 }
 //======================================================================
-void EventHandlerClass::fcgi_worker(Connect* con, Stream *resp, struct pollfd *poll_fd)
+void EventHandlerClass::fcgi_worker(Connect* con, Stream *resp, int cgi_ind_poll)
 {
-    int revents = poll_fd->revents;
-    int fd = poll_fd->fd;
+    int revents = poll_fd[cgi_ind_poll].revents;
+    int events = poll_fd[cgi_ind_poll].revents;
+    int fd = poll_fd[cgi_ind_poll].fd;
 
     if (resp->cgi_status == FASTCGI_BEGIN)
     {
@@ -298,7 +302,7 @@ void EventHandlerClass::fcgi_worker(Connect* con, Stream *resp, struct pollfd *p
         else if (revents != 0)
         {
             print_err(resp, "<%s:%d> Error 0x%02X(0x%02X), fd=%d, id=%d \n", __func__, __LINE__, 
-                        poll_fd->revents, poll_fd->events, poll_fd->fd, resp->id);
+                        revents, events, fd, resp->id);
             resp_502(resp);
         }
     }
@@ -469,6 +473,8 @@ void EventHandlerClass::fcgi_worker(Connect* con, Stream *resp, struct pollfd *p
                 case FCGI_END_REQUEST:
                     {
                         set_frame_data(resp, 0, 1);
+                        if (resp->cgi.fcgiContentLen == 0)
+                            resp->cgi.end = true;
                     }
                     break;
             }
@@ -481,7 +487,7 @@ void EventHandlerClass::fcgi_worker(Connect* con, Stream *resp, struct pollfd *p
     }
 }
 //======================================================================
-void EventHandlerClass::fcgi_get_headers(Connect* con, Stream *resp)
+void EventHandlerClass::fcgi_get_headers(Connect* c, Stream *resp)
 {
     const char *p1 = resp->buf.ptr(), *p = NULL;
     for (int i = 0; i < resp->buf.size(); ++i)
@@ -521,7 +527,7 @@ void EventHandlerClass::fcgi_get_headers(Connect* con, Stream *resp)
                 add_header(resp, 33, get_time().c_str());
                 add_header(resp, 28, "0");
                 resp->create_headers = true;
-
+                resp->cgi.end = true;
                 set_frame_data(resp, 0, FLAG_END_STREAM);
                 return;
             }

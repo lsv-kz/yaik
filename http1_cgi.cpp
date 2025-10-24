@@ -114,11 +114,11 @@ int EventHandlerClass::cgi_stdout(Connect *c, int fd)
     return ret;
 }
 //======================================================================
-void EventHandlerClass::cgi_worker(Connect *con, struct pollfd *poll_fd)
+void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
 {
-    int revents = poll_fd->revents;
-    int events = poll_fd->events;
-    int fd = poll_fd->fd;
+    int revents = poll_fd[cgi_ind_poll].revents;
+    int events = poll_fd[cgi_ind_poll].revents;
+    int fd = poll_fd[cgi_ind_poll].fd;
 
     if (con->h1->resp.cgi_status == CGI_STDIN)
     {
@@ -405,9 +405,6 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
 
     if (header_len == -1)
     {
-        print_err(c, "<%s:%d> Error\n", __func__, __LINE__);
-        c->err = -RS502;
-        http1_end_request(c);
         return;
     }
 

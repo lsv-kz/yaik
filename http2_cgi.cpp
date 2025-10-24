@@ -79,7 +79,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
         setenv("REQUEST_METHOD", get_str_method(resp->httpMethod), 1);
         if (c->Protocol == P_HTTP2)
             setenv("SERVER_PROTOCOL", "HTTP/2.0", 1);
-        else if (c->Protocol == P_HTTP1)
+        else
             setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
         setenv("DOCUMENT_ROOT", conf->DocumentRoot.c_str(), 1);
         setenv("REMOTE_ADDR", c->remoteAddr, 1);
@@ -146,8 +146,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
 
         close(cgi_serv[1]);
         cgi_serv[1] = -1;
-        
-        
+
         int opt = 1;
         ioctl(cgi_serv[0], FIONBIO, &opt);
 
@@ -240,12 +239,10 @@ int EventHandlerClass::cgi_stdin(Stream *resp, int fd)
     if (ret <= 0)
     {
         if (errno == EAGAIN)
-        {
             return ERR_TRY_AGAIN;
-        }
         else
         {
-            print_err(resp, "<%s:%d> Error write()=%d: %s; id=%d \n", __func__, __LINE__, ret, strerror(errno), resp->id);
+            print_err(resp, "<%s:%d> Error write()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
             return -1;
         }
     }
@@ -296,7 +293,7 @@ int is_cgi(Stream *resp)
 {
     const char *p = strrchr(resp->clean_decode_path, '/');
     if (!p)
-        return 0;
+        return -1;
     fcgi_list_addr *i = conf->fcgi_list;
     for (; i; i = i->next)
     {
@@ -313,10 +310,9 @@ int is_cgi(Stream *resp)
     }
 
     if (!i)
-        return 0;
+        return -1;
 
     resp->cgi.socket = &i->addr;
-    resp->source_data = DYN_PAGE;
     if (i->type == FASTCGI)
         resp->cgi_type = FASTCGI;
     else if (i->type == SCGI)
@@ -324,18 +320,21 @@ int is_cgi(Stream *resp)
     else
     {
         resp->source_data = NO_SOURCE;
-        return 0;
+        return -1;
     }
-    resp->cgi.scriptName = i->script_name;
 
-    return 1;
+    resp->cgi.scriptName = resp->clean_decode_path;
+    resp->source_data = DYN_PAGE;
+    resp->resp_status = RS200;
+
+    return 0;
 }
 //======================================================================
-void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, struct pollfd *poll_fd)
+void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
 {
-    int revents = poll_fd->revents;
-    int events = poll_fd->events;
-    int fd = poll_fd->fd;
+    int revents = poll_fd[cgi_ind_poll].revents;
+    int events = poll_fd[cgi_ind_poll].revents;
+    int fd = poll_fd[cgi_ind_poll].fd;
 
     if (resp->cgi_status == CGI_STDIN)
     {

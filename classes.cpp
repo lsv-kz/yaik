@@ -10,8 +10,6 @@ http2::http2()
     max_frame_size = 0;
     cgi_window_update = 0;
     cgi_window_size = 0;
-    num_cgi = 0;
-    
 
     max_streams = conf->MaxConcurrentStreams;
     num_streams = err = 0;
@@ -56,7 +54,7 @@ http2::~http2()
     {
         next = r->next;
         if (conf->PrintDebugMsg)
-            print_err("<%s:%d>~~~~~~~ Close Stream, id=%d \n", __func__, __LINE__, r->id);
+            print_err(r, "<%s:%d>~~~~~~~ Close Stream, id=%d \n", __func__, __LINE__, r->id);
         delete r;
     }
 
@@ -168,7 +166,6 @@ int http2::close_stream(int id)
                     print_err("<%s:%d>~~~~~~~ close cgi stream, id=%d \n", __func__, __LINE__, r->id);
                 if (r->cgi_type <= PHPCGI)
                 {
-                    num_cgi--;
                     kill_chld(r->cgi.pid);
                 }
             }
@@ -429,7 +426,7 @@ int http2::parse(Stream *r)
             r->range = val;
         }
         else if (name == ":authority")
-            r->authority = val;
+            r->host = val;
         else if (name == "content-length")
         {
             r->sReqContentLen = val;

@@ -2,252 +2,13 @@
 
 using namespace std;
 //======================================================================
-static void fcgi_set_param(Connect *c)
-{
-    c->h1->resp.cgi.buf_param.reserve(4096);
-    c->h1->resp.cgi.buf_param.cpy("\0\0\0\0\0\0\0\0", 8);
-
-    for ( ; c->h1->resp.cgi.i_param < c->h1->resp.cgi.size_par; ++c->h1->resp.cgi.i_param)
-    {
-        int len_name = c->h1->resp.cgi.vPar[c->h1->resp.cgi.i_param].name.size();
-        int len_val = c->h1->resp.cgi.vPar[c->h1->resp.cgi.i_param].val.size();
-
-        char s[8], *p = s;
-        int i = 0;
-
-        if (len_name < 0x80)
-        {
-            *(p++) = (unsigned char)len_name;
-            ++i;
-        }
-        else
-        {
-            *(p++) = (unsigned char)((len_name >> 24) | 0x80);
-            *(p++) = (unsigned char)(len_name >> 16);
-            *(p++) = (unsigned char)(len_name >> 8);
-            *(p++) = (unsigned char)len_name;
-            i += 4;
-        }
-
-        if (len_val < 0x80)
-        {
-            *(p++) = (unsigned char)len_val;
-            ++i;
-        }
-        else
-        {
-            *(p++) = (unsigned char)((len_val >> 24) | 0x80);
-            *(p++) = (unsigned char)(len_val >> 16);
-            *(p++) = (unsigned char)(len_val >> 8);
-            *(p++) = (unsigned char)len_val;
-            i += 4;
-        }
-
-        c->h1->resp.cgi.buf_param.cat(s, i);
-        c->h1->resp.cgi.buf_param.cat(c->h1->resp.cgi.vPar[c->h1->resp.cgi.i_param].name.c_str(), len_name);
-        if (len_val > 0)
-        {
-            c->h1->resp.cgi.buf_param.cat(c->h1->resp.cgi.vPar[c->h1->resp.cgi.i_param].val.c_str(), len_val);
-        }
-    }
-
-    fcgi_set_header(&c->h1->resp.cgi.buf_param, FCGI_PARAMS);
-}
+void fcgi_set_param(Stream *resp);
 //======================================================================
-int fcgi_create_params(Connect *c)
+void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
 {
-    int i = 0;
-    Param param;
-    c->h1->resp.cgi.vPar.clear();
-    if (c->h1->resp.cgi.vPar.capacity() < 50)
-        c->h1->resp.cgi.vPar.reserve(50);
-
-    if (c->h1->resp.cgi_type == PHPFPM)
-    {
-        param.name = "REDIRECT_STATUS";
-        param.val = "true";
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "PATH";
-    param.val = "/bin:/usr/bin:/usr/local/bin";
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_SOFTWARE";
-    param.val = conf->ServerSoftware;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "GATEWAY_INTERFACE";
-    param.val = "CGI/1.1";
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "DOCUMENT_ROOT";
-    param.val = conf->DocumentRoot;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_ADDR";
-    param.val = c->remoteAddr;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_PORT";
-    param.val = c->remotePort;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REQUEST_URI";
-    param.val = c->h1->resp.path;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "DOCUMENT_URI";
-    param.val = c->h1->resp.clean_decode_path;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REQUEST_METHOD";
-    param.val = get_str_method(c->h1->resp.httpMethod);
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_PROTOCOL";
-    param.val = "HTTP/1.1";
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_PORT";
-    param.val = conf->ServerPort;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    if (c->h1->resp.host.size())
-    {
-        param.name = "HTTP_HOST";
-        param.val = c->h1->resp.host;
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (c->h1->resp.referer.size())
-    {
-        param.name = "HTTP_REFERER";
-        param.val = c->h1->resp.referer;
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (c->h1->resp.user_agent.size())
-    {
-        param.name = "HTTP_USER_AGENT";
-        param.val = c->h1->resp.user_agent;
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "SCRIPT_NAME";
-    param.val = c->h1->resp.cgi.scriptName;
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    if (c->h1->resp.cgi_type == PHPFPM)
-    {
-        param.name = "SCRIPT_FILENAME";
-        param.val = conf->DocumentRoot + c->h1->resp.clean_decode_path;
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (c->h1->resp.httpMethod == M_POST)
-    {
-        param.name = "CONTENT_TYPE";
-        if (c->h1->resp.sReqContentType.size())
-            param.val = c->h1->resp.sReqContentType;
-        else
-            param.val = "";
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-
-        param.name = "CONTENT_LENGTH";
-        if (c->h1->resp.sReqContentLen.size())
-            param.val = c->h1->resp.sReqContentLen;
-        else
-            param.val = "0";
-        c->h1->resp.cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "QUERY_STRING";
-    if (c->h1->resp.query_string.size())
-        param.val = c->h1->resp.query_string;
-    else
-        param.val = "";
-    c->h1->resp.cgi.vPar.push_back(param);
-    ++i;
-
-    if (i != (int)c->h1->resp.cgi.vPar.size())
-    {
-        print_err(c, "<%s:%d> Error: create fcgi param list %d/%d\n", __func__, __LINE__, i, (int)c->h1->resp.cgi.vPar.size());
-        return -RS500;
-    }
-
-    c->h1->resp.cgi.size_par = i;
-    c->h1->resp.cgi.i_param = 0;
-    c->h1->resp.cgi.timer = 0;
-
-    return 0;
-}
-//======================================================================
-int fcgi_create_connect(Connect *c)
-{
-    if ((c->h1->resp.cgi_type != PHPFPM) && (c->h1->resp.cgi_type != FASTCGI))
-    {
-        print_err(c, "<%s:%d> ? req->scriptType=%d\n", __func__, __LINE__, c->h1->resp.cgi_type);
-        return -1;
-    }
-
-    if (c->h1->resp.cgi_type == PHPFPM)
-        c->h1->resp.cgi.socket = &conf->PathPHP;
-
-    c->h1->resp.cgi.fd = create_fcgi_socket(c->h1->resp.cgi.socket->c_str());
-    if (c->h1->resp.cgi.fd < 0)
-    {
-        print_err(c, "<%s:%d> Error connect to fcgi\n", __func__, __LINE__);
-        return -1;
-    }
-
-    char s[16];
-    s[0] = FCGI_VERSION_1;
-    s[1] = FCGI_BEGIN_REQUEST;
-    s[2] = (unsigned char) ((1 >> 8) & 0xff);
-    s[3] = (unsigned char) ((1) & 0xff);
-    s[4] = (unsigned char) ((8 >> 8) & 0xff);
-    s[5] = (unsigned char) ((8) & 0xff);
-    s[6] = 0;
-    s[7] = 0;
-
-    s[8] = (unsigned char) ((FCGI_RESPONDER >> 8) & 0xff);
-    s[9] = (unsigned char) (FCGI_RESPONDER        & 0xff);
-    s[10] = (unsigned char) 0;
-    memset(s + 11, 0, 5);
-
-    c->h1->resp.cgi.buf_param.cpy(s, 16);
-    c->h1->resp.cgi_status = FASTCGI_BEGIN;
-
-    int ret = fcgi_create_params(c);
-    if (ret < 0)
-        return -1;
-    return 0;
-}
-//======================================================================
-void EventHandlerClass::fcgi_worker(Connect *c, struct pollfd *poll_fd)
-{
-    int revents = poll_fd->revents;
-    int fd = poll_fd->fd;
+    int revents = poll_fd[cgi_ind_poll].revents;
+    int events = poll_fd[cgi_ind_poll].revents;
+    int fd = poll_fd[cgi_ind_poll].fd;
 
     if (c->h1->resp.cgi_status == FASTCGI_BEGIN)
     {
@@ -276,7 +37,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, struct pollfd *poll_fd)
         else if (revents != 0)
         {
             print_err(c, "<%s:%d> Error 0x%02X(0x%02X), fd=%d\n", __func__, __LINE__, 
-                        poll_fd->revents, poll_fd->events, poll_fd->fd);
+                        revents, events, fd);
             c->err = -RS502;
             http1_end_request(c);
         }
@@ -287,7 +48,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, struct pollfd *poll_fd)
         {
             if (c->h1->resp.cgi.buf_param.size_remain() == 0)
             {
-                fcgi_set_param(c);
+                fcgi_set_param(&c->h1->resp);
             }
 
             int ret = write_to_fcgi(c->h1->resp.cgi.fd, c->h1->resp.cgi.buf_param.ptr_remain(), c->h1->resp.cgi.buf_param.size_remain());
@@ -322,7 +83,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, struct pollfd *poll_fd)
         }
         else
         {
-            print_err(c, "<%s:%d> FASTCGI_PARAMS Error revents=0x%02X: %s\n", __func__, __LINE__, revents);
+            print_err(c, "<%s:%d> FASTCGI_PARAMS Error revents=0x%02X\n", __func__, __LINE__, revents);
             c->err = -RS502;
             http1_end_request(c);
         }
@@ -331,7 +92,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, struct pollfd *poll_fd)
     {
         if (revents != POLLOUT)
         {
-            print_err(c, "<%s:%d> FASTCGI_STDIN Error revents=0x%02X: %s\n", __func__, __LINE__, revents);
+            print_err(c, "<%s:%d> FASTCGI_STDIN Error revents=0x%02X\n", __func__, __LINE__, revents);
             c->err = -RS502;
             http1_end_request(c);
             return;
@@ -372,7 +133,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, struct pollfd *poll_fd)
     {
         if (revents != POLLIN)
         {
-            print_err(c, "<%s:%d> FASTCGI_STDOUT Error revents=0x%02X: %s\n", __func__, __LINE__, revents);
+            print_err(c, "<%s:%d> FASTCGI_STDOUT Error revents=0x%02X\n", __func__, __LINE__, revents);
             c->err = -RS502;
             http1_end_request(c);
             return;
@@ -596,9 +357,9 @@ void EventHandlerClass::fcgi_get_headers(Connect *c)
             }
 
             cont_type[j] = 0;
-            c->h1->hdrs << "Content-Type: " << cont_type << "\r\n";
             if (conf->PrintDebugMsg)
                 print_err(c, "<%s:%d> Content-Type: %s\n", __func__, __LINE__, cont_type);
+            c->h1->hdrs << "Content-Type: " << cont_type << "\r\n";
             if ((p - c->h1->resp.send_data.ptr()) == c->h1->resp.send_data.size())
             {
                 c->h1->resp.send_data.init();
