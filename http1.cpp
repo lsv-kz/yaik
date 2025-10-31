@@ -262,7 +262,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             {
                 if (ret != ERR_TRY_AGAIN)
                 {
-                    print_err(c, "<%s:%d> Error send headers: %d, send %ld bytes, %d/%d\n", __func__, __LINE__, ret, c->h1->headers_bytes, c->h1->resp.headers.size_remain(), c->h1->resp.headers.size());
+                    print_err(c, "<%s:%d> Error send headers: %d, send %ld bytes, %d/%d\n", __func__, __LINE__, 
+                            ret, c->h1->headers_bytes, c->h1->resp.headers.size_remain(), c->h1->resp.headers.size());
                     c->err = ret;
                     http1_end_request(c);
                     return -1;
@@ -311,7 +312,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                 write_bytes = c->h1->resp.send_data.read_file(c->h1->resp.fd, data_len);
                 if (write_bytes < 0)
                 {
-                    print_err(c, "<%s:%d> Error read(fd=%d)=%d: %s\n", __func__, __LINE__, c->h1->resp.fd, write_bytes, strerror(errno));
+                    print_err(c, "<%s:%d> Error read(fd=%d)=%d: %s\n", __func__, __LINE__, 
+                                c->h1->resp.fd, write_bytes, strerror(errno));
                     c->err = -1;
                     http1_end_request(c);
                     return -1;
@@ -362,7 +364,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             c->h1->resp.send_data.set_offset(ret);
             if (c->h1->resp.send_data.size_remain())
             {
-                print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__, ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
+                print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__, 
+                            ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
                 return 0;
             }
 
@@ -469,6 +472,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
         }
 
         c->h1->resp.cgi.scriptName.clear();
+        c->h1->resp.cgi.start = false;
         --all_cgi;
     }
     else
@@ -757,7 +761,7 @@ int create_response_headers(Connect *c)
     {
         if ((c->h1->resp.source_data == DYN_PAGE) || (c->h1->resp.source_data == FROM_DATA_BUFFER))
         {
-            if (c->h1->mode_send == CHUNK)
+            if (c->h1->chunk_mode == CHUNK)
             {
                 if ((c->h1->resp.httpMethod == M_GET) || (c->h1->resp.httpMethod == M_POST))
                     headers << "Transfer-Encoding: chunked\r\n";
@@ -866,7 +870,7 @@ int send_message(Connect *c, const char *msg)
         c->h1->resp.resp_content_len = c->h1->resp.send_data.size();
     }
 
-    c->h1->mode_send = NO_CHUNK;
+    c->h1->chunk_mode = NO_CHUNK;
     if (create_response_headers(c) < 0)
         return -1;
 

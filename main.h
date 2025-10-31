@@ -97,7 +97,7 @@ struct FrameRedySend
     ByteArray frame;
 };
 //======================================================================
-enum MODE_SEND { NO_CHUNK, CHUNK, CHUNK_END };
+enum CHUNK_MODE { NO_CHUNK, CHUNK, CHUNK_END };
 //======================================================================
 struct http2
 {
@@ -198,7 +198,7 @@ struct http1
 
     Stream resp;
     String hdrs;
-    MODE_SEND mode_send;
+    CHUNK_MODE chunk_mode;
     bool connKeepAlive;
     int numPart;
     long headers_bytes;
@@ -207,7 +207,7 @@ struct http1
     {
         connKeepAlive = true;
         hdrs.clear();
-        mode_send = NO_CHUNK;
+        chunk_mode = NO_CHUNK;
         numPart = 0;
     }
     //------------------------------------------------------------------
@@ -221,7 +221,7 @@ struct http1
         resp.init();
         //----------------------
         hdrs.clear();
-        mode_send = NO_CHUNK;
+        chunk_mode = NO_CHUNK;
         numPart = 0;
     }
     
@@ -308,7 +308,7 @@ class EventHandlerClass
     std::mutex mtx_thr, mtx_cgi;
     std::condition_variable cond_thr;
 
-    int num_wait, all_cgi;
+    int num_poll, all_cgi;
     int close_thr;
     unsigned long num_request;
 
@@ -355,13 +355,14 @@ class EventHandlerClass
     void cgi_worker(Connect *c, int i);
     int cgi_stdout(Connect *c, int fd);
 
-    void scgi_worker(Connect* c, Stream *r, int i);
-    void scgi_worker(Connect* c, int i);
+    void scgi_worker(Connect *c, Stream *r, int i);
+    void scgi_worker(Connect *c, int i);
 
-    void fcgi_worker(Connect* c, Stream *r, int i);
+    void fcgi_worker(Connect *c, Stream *r, int i);
+    void fcgi_get_headers(Connect *c, Stream *r);
+
     void fcgi_worker(Connect *c, int i);
-    void fcgi_get_headers(Connect* con, Stream *r);
-    void fcgi_get_headers(Connect *resp);
+    void fcgi_get_headers(Connect *c);
 
     void http1_end_request(Connect *c);
 

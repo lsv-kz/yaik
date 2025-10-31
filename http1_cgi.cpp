@@ -95,7 +95,7 @@ int EventHandlerClass::cgi_stdout(Connect *c, int fd)
         }
         else
         {
-            if (c->h1->mode_send == CHUNK)
+            if (c->h1->chunk_mode == CHUNK)
             {
                 c->h1->resp.send_data.cpy("01234567", 8);
                 c->h1->resp.send_data.cat(buf, ret);
@@ -231,7 +231,7 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
                 con->h1->resp.cgi.end = true;
                 if (con->h1->resp.create_headers)
                 {
-                    if (con->h1->mode_send == CHUNK)
+                    if (con->h1->chunk_mode == CHUNK)
                     {
                         char s[] = "0\r\n\r\n";
                         con->h1->resp.send_data.cat_str(s);
@@ -292,7 +292,7 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
                 return;
             }
 
-            if (con->h1->mode_send == CHUNK)
+            if (con->h1->chunk_mode == CHUNK)
             {
                 char s[] = "0\r\n\r\n";
                 con->h1->resp.send_data.cpy(s, 5);
@@ -376,7 +376,7 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
                         }
                     }
 
-                    c->h1->mode_send = NO_CHUNK;
+                    c->h1->chunk_mode = NO_CHUNK;
                     c->h1->resp.resp_content_len = 0;
                     if (create_response_headers(c) < 0)
                     {
@@ -414,7 +414,7 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
     }
     else
     {
-        if (c->h1->mode_send == CHUNK)
+        if (c->h1->chunk_mode == CHUNK)
         {
             if (c->h1->resp.send_data.set_offset(-8) < 0)
             {

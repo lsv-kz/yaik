@@ -519,7 +519,8 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                     {
                         if (resp->buf.size() > 256)
                         {
-                            print_err(resp, "<%s:%d> Error empty line not found (read from script %d bytes), id=%d \n", __func__, __LINE__, resp->buf.size(), resp->id);
+                            print_err(resp, "<%s:%d> Error empty line not found (read from script %d bytes), id=%d \n", 
+                                            __func__, __LINE__, resp->buf.size(), resp->id);
                             resp_502(resp);
                         }
                     }
@@ -546,7 +547,8 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                 set_frame_data(resp, 0, FLAG_END_STREAM);
             else
             {
-                print_err(resp, "<%s:%d> Error 502 Bad Gateway, revents=0x%02X, id=%d \n", __func__, __LINE__, revents, resp->id);
+                print_err(resp, "<%s:%d> Error 502 Bad Gateway, revents=0x%02X, id=%d \n", 
+                            __func__, __LINE__, revents, resp->id);
                 resp_502(resp);
                 return;
             }

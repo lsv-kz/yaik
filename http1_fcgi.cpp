@@ -70,7 +70,6 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                 if (c->h1->resp.cgi.buf_param.size() == 8)
                 {
                     c->h1->resp.cgi_status = CGI_STDIN;
-                    c->h1->con_status = http1::READ_POSTDATA;
                     if ((c->h1->resp.post_content_len <= 0) && (c->h1->resp.post_data.size() == 0))
                     {
                         c->h1->resp.post_data.cpy("\0\0\0\0\0\0\0\0", 8);
@@ -174,7 +173,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             {
                 if ((ret == -1) && (errno == EAGAIN))
                     return;
-                print_err(c, "<%s:%d> Error read()=%d\n", __func__, __LINE__, ret);
+                print_err(c, "<%s:%d> Error read fcgi header: %d\n", __func__, __LINE__, ret);
                 c->err = -RS502;
                 http1_end_request(c);
                 return;
@@ -185,12 +184,15 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             c->h1->resp.cgi.fcgiPaddingLen = (unsigned char)s[6];
             if ((c->h1->resp.cgi.fcgiContentLen > 65535) || (c->h1->resp.cgi.fcgiPaddingLen > 255))
             {
-                print_err(c, "<%s:%d> Error fcgiContentLen=%d, fcgiPaddingLen=%d\n", __func__, __LINE__, c->h1->resp.cgi.fcgiContentLen, c->h1->resp.cgi.fcgiPaddingLen);
+                print_err(c, "<%s:%d> Error fcgiContentLen=%d, fcgiPaddingLen=%d\n", __func__, __LINE__, 
+                            c->h1->resp.cgi.fcgiContentLen, c->h1->resp.cgi.fcgiPaddingLen);
                 hex_print_stderr(__func__, __LINE__, s, 8);
                 c->err = -1;
                 http1_end_request(c);
                 return;
             }
+            else if (c->h1->resp.cgi.fcgiContentLen == 0)
+                return;
 
             switch (s[1])
             {
@@ -199,16 +201,10 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                 case FCGI_STDERR:
                     break;
                 case FCGI_END_REQUEST:
-                    c->h1->resp.cgi.end = true;
-                    if (c->h1->mode_send == CHUNK)
+                    if (c->h1->chunk_mode == CHUNK)
                     {
                         char s[] = "0\r\n\r\n";
                         c->h1->resp.send_data.cpy(s, 5);
-                    }
-                    else
-                    {
-                        c->h1->resp.send_data.init();
-                        http1_end_request(c);
                     }
 
                     break;
@@ -217,9 +213,10 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                     hex_print_stderr(__func__, __LINE__, s, 8);
                     c->err = -RS502;
                     http1_end_request(c);
+                    return;
             }
 
-            return;
+            //return;
         }
 
         char buf[65535]; // 16384
@@ -231,16 +228,14 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             switch (c->h1->resp.cgi.fcgi_type)
             {
                 case FCGI_STDOUT:
-                    if ((c->h1->con_status == http1::SEND_RESP_HEADERS) && 
-                        (c->h1->resp.create_headers == false)
-                    )
+                    if (c->h1->resp.create_headers == false)
                     {
                         c->h1->resp.send_data.cat(buf, ret);
                         fcgi_get_headers(c);
                     }
                     else
                     {
-                        if (c->h1->mode_send == CHUNK)
+                        if (c->h1->chunk_mode == CHUNK)
                         {
                             c->h1->resp.send_data.cpy("01234567", 8);
                             c->h1->resp.send_data.cat(buf, ret);
@@ -266,14 +261,9 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                 case FCGI_END_REQUEST:
                     {
                         c->h1->resp.cgi.end = true;
-                        if (c->h1->mode_send == CHUNK)
+                        if (c->h1->resp.send_data.size_remain() == 0)
                         {
-                            char s[] = "0\r\n\r\n";
-                            c->h1->resp.send_data.cat_str(s);
-                        }
-
-                        if (c->h1->resp.send_data.size() == 0)
-                        {
+                            c->h1->resp.send_data.init();
                             http1_end_request(c);
                         }
                     }
@@ -326,7 +316,7 @@ void EventHandlerClass::fcgi_get_headers(Connect *c)
             sscanf(p3 + 7, "%d", &c->h1->resp.resp_status);
             if (c->h1->resp.resp_status == RS204)
             {
-                c->h1->mode_send = NO_CHUNK;
+                c->h1->chunk_mode = NO_CHUNK;
                 c->h1->resp.resp_content_len = 0;
                 if (create_response_headers(c) < 0)
                 {
@@ -366,7 +356,7 @@ void EventHandlerClass::fcgi_get_headers(Connect *c)
             }
             else
             {
-                if (c->h1->mode_send == CHUNK)
+                if (c->h1->chunk_mode == CHUNK)
                 {
                     c->h1->resp.send_data.set_offset(p - c->h1->resp.send_data.ptr() - 8);
                     int ret = cgi_set_size_chunk(&c->h1->resp.send_data);

@@ -19,7 +19,7 @@ EventHandlerClass::~EventHandlerClass()
 EventHandlerClass::EventHandlerClass()
 {
     num_request = 0;
-    close_thr = num_wait = all_cgi = 0;
+    close_thr = num_poll = all_cgi = 0;
     work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
     cgi_array = NULL;
 }
@@ -88,7 +88,7 @@ mtx_thr.unlock();
 //======================================================================
 int EventHandlerClass::cgi_poll()
 {
-    num_wait = 0;
+    num_poll = 0;
 
     Connect *c = work_list_start, *next = NULL;
     for ( ; c; c = next)
@@ -103,18 +103,18 @@ int EventHandlerClass::cgi_poll()
             http2_cgi_set(c);
         }
 
-        if (num_wait >= conf->MaxAcceptConnections)
+        if (num_poll >= conf->MaxAcceptConnections)
         {
-            print_err(c, "<%s:%d> !!! num_wait[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__, 
-                    num_wait, conf->MaxAcceptConnections);
+            print_err(c, "<%s:%d> !!! num_poll[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__, 
+                    num_poll, conf->MaxAcceptConnections);
             break;
         }
     }
 
-    if (num_wait == 0)
+    if (num_poll == 0)
         return 0;
 
-    int ret_poll = poll(poll_fd, num_wait, conf->TimeoutPoll);
+    int ret_poll = poll(poll_fd, num_poll, conf->TimeoutPoll);
     if (ret_poll == -1)
     {
         print_err("<%s:%d> Error poll(): %s\n", __func__, __LINE__, strerror(errno));
@@ -125,7 +125,7 @@ int EventHandlerClass::cgi_poll()
         return 0;
     }
 
-    for ( int i = 0; (i < num_wait); ++i)
+    for ( int i = 0; (i < num_poll); ++i)
     {
         c = conn_array[i];
         if (c->Protocol == P_HTTP1)
@@ -157,7 +157,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
         if ((resp->source_data != DYN_PAGE) || resp->cgi.end)
             continue;
 
-        if (num_wait >= conf->MaxAcceptConnections)
+        if (num_poll >= conf->MaxAcceptConnections)
             break;
 
         if ((resp->cgi.timer == 0) || (resp->cgi.start == false))
@@ -203,8 +203,6 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                         resp_500(resp);
                         continue;
                     }
-                    else
-                        resp->cgi_status = FASTCGI_BEGIN;
                 }
                 else if (resp->cgi_type == SCGI)
                 {
@@ -214,8 +212,6 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                         resp_500(resp);
                         continue;
                     }
-                    else
-                        resp->cgi_status = SCGI_PARAMS;
                 }
 
                 c->client_timer = 0;
@@ -225,43 +221,43 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
 
             if ((resp->cgi_status == FASTCGI_BEGIN) || (resp->cgi_status == FASTCGI_PARAMS) || (resp->cgi_status == SCGI_PARAMS))
             {
-                poll_fd[num_wait].fd = resp->cgi.fd;
-                poll_fd[num_wait].events = POLLOUT;
-                conn_array[num_wait] = c;
-                cgi_array[num_wait] = resp;
-                ++num_wait;
+                poll_fd[num_poll].fd = resp->cgi.fd;
+                poll_fd[num_poll].events = POLLOUT;
+                conn_array[num_poll] = c;
+                cgi_array[num_poll] = resp;
+                ++num_poll;
             }
             else if ((resp->cgi_status == CGI_STDIN) && resp->post_data.size())
             {
                 if ((resp->cgi_type == CGI) || (resp->cgi_type == PHPCGI))
                 {
-                    poll_fd[num_wait].fd = resp->cgi.to_script;
+                    poll_fd[num_poll].fd = resp->cgi.to_script;
                 }
                 else
                 {
-                    poll_fd[num_wait].fd = resp->cgi.fd;
+                    poll_fd[num_poll].fd = resp->cgi.fd;
                 }
 
-                poll_fd[num_wait].events = POLLOUT;
-                conn_array[num_wait] = c;
-                cgi_array[num_wait] = resp;
-                ++num_wait;
+                poll_fd[num_poll].events = POLLOUT;
+                conn_array[num_poll] = c;
+                cgi_array[num_poll] = resp;
+                ++num_poll;
             }
             else if ((resp->cgi_status == CGI_STDOUT) && (resp->send_data.size() == 0))
             {
                 if ((resp->cgi_type == CGI) || (resp->cgi_type == PHPCGI))
                 {
-                    poll_fd[num_wait].fd = resp->cgi.from_script;
+                    poll_fd[num_poll].fd = resp->cgi.from_script;
                 }
                 else
                 {
-                    poll_fd[num_wait].fd = resp->cgi.fd;
+                    poll_fd[num_poll].fd = resp->cgi.fd;
                 }
 
-                poll_fd[num_wait].events = POLLIN;
-                conn_array[num_wait] = c;
-                cgi_array[num_wait] = resp;
-                ++num_wait;
+                poll_fd[num_poll].events = POLLIN;
+                conn_array[num_poll] = c;
+                cgi_array[num_poll] = resp;
+                ++num_poll;
             }
         }
     }
@@ -336,7 +332,7 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
         return;
     }
 
-    if ((c->h1->resp.cgi_status == CGI_CREATE) && (all_cgi < conf->MaxCgiProc))
+    if ((c->h1->resp.cgi_status == CGI_CREATE) && (all_cgi < conf->MaxCgiProc) && (all_cgi >= 0))
     {
         if ((c->h1->resp.cgi_type == CGI) || (c->h1->resp.cgi_type == PHPCGI))
         {
@@ -349,16 +345,6 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
                 http1_end_request(c);
                 return;
             }
-
-            if (c->h1->resp.httpMethod == M_POST)
-            {
-                if (c->h1->resp.post_content_len <= 0)
-                    c->h1->con_status = http1::SEND_RESP_HEADERS;
-                else
-                    c->h1->con_status = http1::READ_POSTDATA;
-            }
-            else
-                c->h1->con_status = http1::SEND_RESP_HEADERS;
         }
         else if (c->h1->resp.cgi_type == SCGI)
         {
@@ -371,8 +357,6 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
                 http1_end_request(c);
                 return;
             }
-            else
-                c->h1->resp.cgi_status = SCGI_PARAMS;
         }
         else if ((c->h1->resp.cgi_type == PHPFPM) || (c->h1->resp.cgi_type == FASTCGI))
         {
@@ -384,10 +368,6 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
                 http1_end_request(c);
                 return;
             }
-            else
-            {
-                c->h1->resp.cgi_status = FASTCGI_BEGIN;
-            }
         }
         else
         {
@@ -397,11 +377,11 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
             return;
         }
 
-        c->h1->mode_send = (c->h1->connKeepAlive) ? CHUNK : NO_CHUNK;
+        c->h1->chunk_mode = (c->h1->connKeepAlive) ? CHUNK : NO_CHUNK;
         c->client_timer = 0;
         c->h1->resp.cgi.start = true;
         ++all_cgi;
-        return;
+        //return;
     }
 
     if ((c->h1->resp.cgi_status == FASTCGI_BEGIN) || 
@@ -409,27 +389,27 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
         (c->h1->resp.cgi_status == SCGI_PARAMS)
     )
     {
-        poll_fd[num_wait].fd = c->h1->resp.cgi.fd;
-        poll_fd[num_wait].events = POLLOUT;
-        conn_array[num_wait] = c;
-        cgi_array[num_wait] = &c->h1->resp;
-        ++num_wait;
+        poll_fd[num_poll].fd = c->h1->resp.cgi.fd;
+        poll_fd[num_poll].events = POLLOUT;
+        conn_array[num_poll] = c;
+        cgi_array[num_poll] = &c->h1->resp;
+        ++num_poll;
     }
     else if ((c->h1->resp.cgi_status == CGI_STDIN) && c->h1->resp.post_data.size_remain())
     {
         if ((c->h1->resp.cgi_type == CGI) || (c->h1->resp.cgi_type == PHPCGI))
         {
-            poll_fd[num_wait].fd = c->h1->resp.cgi.to_script;
+            poll_fd[num_poll].fd = c->h1->resp.cgi.to_script;
         }
         else
         {
-            poll_fd[num_wait].fd = c->h1->resp.cgi.fd;
+            poll_fd[num_poll].fd = c->h1->resp.cgi.fd;
         }
 
-        poll_fd[num_wait].events = POLLOUT;
-        conn_array[num_wait] = c;
-        cgi_array[num_wait] = &c->h1->resp;
-        ++num_wait;
+        poll_fd[num_poll].events = POLLOUT;
+        conn_array[num_poll] = c;
+        cgi_array[num_poll] = &c->h1->resp;
+        ++num_poll;
     }
     else if ((c->h1->resp.cgi_status == CGI_STDOUT) && 
              ((c->h1->resp.send_data.size_remain() == 0) || (c->h1->resp.create_headers == false))
@@ -437,17 +417,17 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
     {
         if ((c->h1->resp.cgi_type == CGI) || (c->h1->resp.cgi_type == PHPCGI))
         {
-            poll_fd[num_wait].fd = c->h1->resp.cgi.from_script;
+            poll_fd[num_poll].fd = c->h1->resp.cgi.from_script;
         }
         else
         {
-            poll_fd[num_wait].fd = c->h1->resp.cgi.fd;
+            poll_fd[num_poll].fd = c->h1->resp.cgi.fd;
         }
 
-        poll_fd[num_wait].events = POLLIN;
-        conn_array[num_wait] = c;
-        cgi_array[num_wait] = &c->h1->resp;
-        ++num_wait;
+        poll_fd[num_poll].events = POLLIN;
+        conn_array[num_poll] = c;
+        cgi_array[num_poll] = &c->h1->resp;
+        ++num_poll;
     }
 }
 //======================================================================
@@ -481,14 +461,14 @@ void EventHandlerClass::http1_cgi_poll(Connect *c, int poll_ind)
 //======================================================================
 void EventHandlerClass::set_poll()
 {
-    num_wait = 0;
+    num_poll = 0;
     Connect *c = work_list_start, *next = NULL;
     for ( ; c; c = next)
     {
-        if (num_wait >= conf->MaxAcceptConnections)
+        if (num_poll >= conf->MaxAcceptConnections)
         {
-            print_err(c, "<%s:%d> !!! num_wait[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__, 
-                    num_wait, conf->MaxAcceptConnections);
+            print_err(c, "<%s:%d> !!! num_poll[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__, 
+                    num_poll, conf->MaxAcceptConnections);
             break;
         }
 
@@ -575,21 +555,21 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                 return;
         }
 
-        poll_fd[num_wait].events = 0;
+        poll_fd[num_poll].events = 0;
         if (c->h1->con_status == http1::READ_REQUEST)
         {
-            poll_fd[num_wait].fd = c->clientSocket;
-            poll_fd[num_wait].events = POLLIN;
+            poll_fd[num_poll].fd = c->clientSocket;
+            poll_fd[num_poll].events = POLLIN;
         }
         else if ((c->h1->con_status == http1::READ_POSTDATA) && (c->h1->resp.post_data.size() <= 32768))
         {
-            poll_fd[num_wait].fd = c->clientSocket;
-            poll_fd[num_wait].events = POLLIN;
+            poll_fd[num_poll].fd = c->clientSocket;
+            poll_fd[num_poll].events = POLLIN;
         }
         else if ((c->h1->con_status == http1::SEND_RESP_HEADERS) && c->h1->resp.headers.size_remain())
         {
-            poll_fd[num_wait].fd = c->clientSocket;
-            poll_fd[num_wait].events = POLLOUT;
+            poll_fd[num_poll].fd = c->clientSocket;
+            poll_fd[num_poll].events = POLLOUT;
         }
         else if (c->h1->con_status == http1::SEND_ENTITY)
         {
@@ -597,8 +577,8 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                  (c->h1->resp.source_data != DYN_PAGE)
             )
             {
-                poll_fd[num_wait].fd = c->clientSocket;
-                poll_fd[num_wait].events = POLLOUT;
+                poll_fd[num_poll].fd = c->clientSocket;
+                poll_fd[num_poll].events = POLLOUT;
             }
         }
         else if (c->h1->con_status == http1::SSL_SHUTDOWN)
@@ -613,13 +593,13 @@ void EventHandlerClass::http1_set_poll(Connect *c)
             }
             else
             {
-                poll_fd[num_wait].fd = c->clientSocket;
-                poll_fd[num_wait].events = c->tls.poll_events;
+                poll_fd[num_poll].fd = c->clientSocket;
+                poll_fd[num_poll].events = c->tls.poll_events;
             }
         }
 
-        if (poll_fd[num_wait].events)
-            conn_array[num_wait++] = c;
+        if (poll_fd[num_poll].events)
+            conn_array[num_poll++] = c;
     }
 }
 //======================================================================
@@ -687,8 +667,8 @@ void EventHandlerClass::http2_set_poll(Connect *c)
         if (c->h2->work_stream == NULL)
             c->h2->work_stream = c->h2->start_stream;
 
-        poll_fd[num_wait].fd = c->clientSocket;
-        poll_fd[num_wait].events = 0;
+        poll_fd[num_poll].fd = c->clientSocket;
+        poll_fd[num_poll].events = 0;
         if (c->h2->con_status == http2::SSL_SHUTDOWN)
         {
             if (c->tls.shutdown_timer == 0)
@@ -700,36 +680,36 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 return;
             }
             else
-                poll_fd[num_wait].events = c->tls.poll_events;
+                poll_fd[num_poll].events = c->tls.poll_events;
         }
         else if ((c->h2->con_status == http2::PREFACE_MESSAGE) || (c->h2->con_status == http2::RECV_SETTINGS))
-            poll_fd[num_wait].events = POLLIN;
+            poll_fd[num_poll].events = POLLIN;
         else if (c->h2->con_status == http2::SEND_SETTINGS)
-            poll_fd[num_wait].events = POLLOUT;
+            poll_fd[num_poll].events = POLLOUT;
         else // con_status = PROCESSING_REQUESTS
         {
             if (c->h2->goaway.size() || c->h2->ping.size() || c->h2->start_list_send_frame || c->h2->try_again)
             {
-                poll_fd[num_wait].events = POLLOUT;
-                conn_array[num_wait++] = c;
+                poll_fd[num_poll].events = POLLOUT;
+                conn_array[num_poll++] = c;
                 return;
             }
 
             if (c->h2->frame_win_update.size() || (c->h2->cgi_window_update > 0))
             {
-                poll_fd[num_wait].events = POLLOUT;
-                conn_array[num_wait++] = c;
+                poll_fd[num_poll].events = POLLOUT;
+                conn_array[num_poll++] = c;
                 return;
             }
 
-            poll_fd[num_wait].events = POLLIN;
+            poll_fd[num_poll].events = POLLIN;
             if (c->h2->work_stream)
             {
                 if ((c->h2->connect_window_size <= 0) && c->h2->work_stream->send_headers)
                 {
                     if (conf->PrintDebugMsg)
                         print_err(c, "<%s:%d> connect_window_size <= 0\n", __func__, __LINE__);
-                    conn_array[num_wait++] = c;
+                    conn_array[num_poll++] = c;
                     return;
                 }
             }
@@ -748,7 +728,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                     (resp->send_headers && (resp->stream_window_size > 0))
                 )
                 {
-                    poll_fd[num_wait].events |= POLLOUT;
+                    poll_fd[num_poll].events |= POLLOUT;
                     c->h2->work_stream = resp;
                     break;
                 }
@@ -758,19 +738,19 @@ void EventHandlerClass::http2_set_poll(Connect *c)
             }
         }
 
-        if (poll_fd[num_wait].events)
-            conn_array[num_wait++] = c;
+        if (poll_fd[num_poll].events)
+            conn_array[num_poll++] = c;
     }
 }
 //======================================================================
 int EventHandlerClass::_poll()
 {
-    if (num_wait == 0)
+    if (num_poll == 0)
         return 0;
     int time_poll = conf->TimeoutPoll;
     if (all_cgi > 0)
         time_poll = 0;
-    int ret_poll = poll(poll_fd, num_wait, time_poll);
+    int ret_poll = poll(poll_fd, num_poll, time_poll);
     if (ret_poll == -1)
     {
         print_err("<%s:%d> Error poll(): %s\n", __func__, __LINE__, strerror(errno));
@@ -781,7 +761,7 @@ int EventHandlerClass::_poll()
         return 0;
     }
 
-    for ( int i = 0; i < num_wait; ++i)
+    for ( int i = 0; i < num_poll; ++i)
     {
         Connect *c = conn_array[i];
         if (poll_fd[i].revents == 0)

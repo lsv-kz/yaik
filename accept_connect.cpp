@@ -143,8 +143,7 @@ void accept_connect(int serverSocket)
             int clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &addrSize);
             if (clientSocket == -1)
             {
-                print_err("<%s:%d>  Error accept(%d/%d): %s\n", __func__, __LINE__, 
-                        poll_fd[0].fd, serverSocket, strerror(errno));
+                print_err("<%s:%d>  Error accept(): %s\n", __func__, __LINE__, strerror(errno));
                 if ((errno == EMFILE) || (errno == ENFILE)) // (errno == EINTR)
                     continue;
                 break;

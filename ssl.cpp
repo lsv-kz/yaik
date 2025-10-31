@@ -147,7 +147,7 @@ int ssl_read(Connect *con, char *buf, int len)
         }
         else
         {
-            print_err(con, "<%s:%d> Error SSL_read(, %p, %d)=%d: %s\n", __func__, __LINE__, buf, len, ret, ssl_strerror(con->tls.err));
+            print_err(con, "<%s:%d> Error SSL_read(, , %d)=%d: %s\n", __func__, __LINE__, len, ret, ssl_strerror(con->tls.err));
             return -1;
         }
     }
@@ -181,7 +181,7 @@ int ssl_peek(Connect *con, char *buf, int len)
         }
         else
         {
-            print_err(con, "<%s:%d> Error SSL_peek(, %p, %d)=%d: %s\n", __func__, __LINE__, buf, len, ret, ssl_strerror(con->tls.err));
+            print_err(con, "<%s:%d> Error SSL_peek(, , %d)=%d: %s\n", __func__, __LINE__, len, ret, ssl_strerror(con->tls.err));
             return -1;
         }
     }
