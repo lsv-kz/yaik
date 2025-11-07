@@ -256,7 +256,7 @@ int scgi_set_param(Stream *resp)
     return resp->cgi.buf_param.size();
 }
 //======================================================================
-void EventHandlerClass::scgi_worker(Connect* con, Stream *resp, int cgi_ind_poll)
+void EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
 {
     int revents = poll_fd[cgi_ind_poll].revents;
     int events = poll_fd[cgi_ind_poll].revents;
@@ -268,7 +268,7 @@ void EventHandlerClass::scgi_worker(Connect* con, Stream *resp, int cgi_ind_poll
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
-                    resp_502(resp);
+                    resp_502(c, resp);
                 return;
             }
 
@@ -294,7 +294,7 @@ void EventHandlerClass::scgi_worker(Connect* con, Stream *resp, int cgi_ind_poll
         else
         {
             print_err(resp, "<%s:%d> Error 0x%02X(0x%02X)\n", __func__, __LINE__, revents, events);
-            resp_502(resp);
+            resp_502(c, resp);
         }
     }
 }

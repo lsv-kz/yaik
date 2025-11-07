@@ -101,8 +101,14 @@ enum CHUNK_MODE { NO_CHUNK, CHUNK, CHUNK_END };
 //======================================================================
 struct http2
 {
-    enum HTTP2_STATUS { SSL_ACCEPT = 1, SSL_SHUTDOWN, PREFACE_MESSAGE, RECV_SETTINGS, SEND_SETTINGS, PROCESSING_REQUESTS, };
-    HTTP2_STATUS con_status;
+    enum HTTP2_STATUS {
+        SSL_ACCEPT = 1,
+        SSL_SHUTDOWN,
+        PREFACE_MESSAGE,
+        RECV_SETTINGS,
+        SEND_SETTINGS,
+        PROCESSING_REQUESTS,
+    } con_status;
 
     Stream *start_stream;
     Stream *end_stream;
@@ -193,22 +199,25 @@ private:
 //----------------------------------------------------------------------
 struct http1
 {
-    enum HTTP1_STATUS { SSL_ACCEPT = 1, SSL_SHUTDOWN, READ_REQUEST, READ_POSTDATA, SEND_RESP_HEADERS, SEND_ENTITY, };
-    HTTP1_STATUS con_status;
+    enum HTTP1_STATUS {
+        SSL_ACCEPT = 1,
+        SSL_SHUTDOWN,
+        READ_REQUEST,
+        READ_POSTDATA,
+        SEND_RESP_HEADERS,
+        SEND_ENTITY,
+    } con_status;
 
     Stream resp;
     String hdrs;
     CHUNK_MODE chunk_mode;
     bool connKeepAlive;
-    int numPart;
-    long headers_bytes;
     //------------------------------------------------------------------
     http1()
     {
         connKeepAlive = true;
         hdrs.clear();
         chunk_mode = NO_CHUNK;
-        numPart = 0;
     }
     //------------------------------------------------------------------
     ~http1()
@@ -222,7 +231,6 @@ struct http1
         //----------------------
         hdrs.clear();
         chunk_mode = NO_CHUNK;
-        numPart = 0;
     }
     
     //------------------------------------------------------------------
@@ -484,15 +492,14 @@ void resp_200(Stream *resp);
 void resp_204(Stream *resp);
 void resp_400(Stream *resp);
 void resp_403(Stream *resp);
-void resp_404(Stream *resp);
-void resp_408(Stream *resp);
+void resp_404(Connect *c, Stream *resp);
 void resp_411(Stream *resp);
 void resp_413(Stream *resp);
 void resp_414(Stream *resp);
 void resp_431(Stream *resp);
-void resp_500(Stream *resp);
-void resp_502(Stream *resp);
-void resp_504(Stream *resp);
+void resp_500(Connect *c, Stream *resp);
+void resp_502(Connect *c, Stream *resp);
+void resp_504(Connect *c, Stream *resp);
 void hex_print_stderr(const char *s, int line, const void *p, int n);
 const char *http2_status_resonse(int st);
 //--------------------------- log.cpp ----------------------------------

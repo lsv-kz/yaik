@@ -146,7 +146,6 @@ int set_response(Connect *c)
     //--------------------- send file ----------------------------------
     c->h1->resp.source_data = FROM_FILE;
     c->h1->resp.file_size = file_size(path.c_str());
-    c->h1->numPart = 0;
     c->h1->resp.resp_content_type = content_type(path.c_str());
     c->h1->resp.fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (c->h1->resp.fd == -1)
@@ -162,22 +161,28 @@ int set_response(Connect *c)
 
     if (c->h1->resp.range.size())
     {
-        if (parse_range(c->h1->resp.range.c_str(), c->h1->resp.file_size, &c->h1->resp.offset, &c->h1->resp.resp_content_len))
+        int ret = parse_range(c->h1->resp.range.c_str(), c->h1->resp.file_size, &c->h1->resp.offset, &c->h1->resp.resp_content_len);
+        if (ret < 0)
         {
-            print_err(c, "<%s:%d> Error parse_range(%s)\n", __func__, __LINE__, c->h1->resp.range.c_str());
-            return -RS400;
+            print_err(c, "<%s:%d> Error parse_range(%s)=%d\n", __func__, __LINE__, c->h1->resp.range.c_str(), ret);
+            return ret;
         }
-
-        if (c->h1->resp.offset > 0)
-            lseek(c->h1->resp.fd, c->h1->resp.offset, SEEK_SET);
-        c->h1->resp.resp_status = RS206;
-        c->h1->numPart = 1;
+        else if (ret == 0)
+        {
+            c->h1->resp.resp_content_len = c->h1->resp.file_size;
+            c->h1->resp.resp_status = RS200;
+        }
+        else
+        {
+            if (c->h1->resp.offset > 0)
+                lseek(c->h1->resp.fd, c->h1->resp.offset, SEEK_SET);
+            c->h1->resp.resp_status = RS206;
+        }
     }
     else
     {
         c->h1->resp.resp_content_len = c->h1->resp.file_size;
         c->h1->resp.resp_status = RS200;
-        c->h1->numPart = 0;
     }
 
     if (create_response_headers(c))
@@ -262,8 +267,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             {
                 if (ret != ERR_TRY_AGAIN)
                 {
-                    print_err(c, "<%s:%d> Error send headers: %d, send %ld bytes, %d/%d\n", __func__, __LINE__, 
-                            ret, c->h1->headers_bytes, c->h1->resp.headers.size_remain(), c->h1->resp.headers.size());
+                    print_err(c, "<%s:%d> Error send headers: %d, %d/%d\n", __func__, __LINE__, 
+                            ret, c->h1->resp.headers.size_remain(), c->h1->resp.headers.size());
                     c->err = ret;
                     http1_end_request(c);
                     return -1;
@@ -274,7 +279,6 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             else
             {
                 c->client_timer = 0;
-                c->h1->headers_bytes += ret;
                 c->h1->resp.headers.set_offset(ret);
                 if (c->h1->resp.headers.size_remain())
                     return ERR_TRY_AGAIN;
@@ -776,7 +780,7 @@ int create_response_headers(Connect *c)
         }
         else
         {
-            if (c->h1->numPart == 1)
+            if (c->h1->resp.resp_status == RS206)
             {
                 if (c->h1->resp.resp_content_type)
                     headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
@@ -785,21 +789,26 @@ int create_response_headers(Connect *c)
                 headers << "Content-Range: bytes " << c->h1->resp.offset << "-"
                                                 << (c->h1->resp.offset + c->h1->resp.resp_content_len - 1)
                                                 << "/" << c->h1->resp.file_size << "\r\n";
+                headers << "Accept-Ranges: bytes\r\n";
             }
-            else if (c->h1->numPart == 0)
+            else if (c->h1->resp.resp_status == RS200)
             {
                 if (c->h1->resp.resp_content_type)
                     headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
-    
+
                 if (c->h1->resp.resp_content_len >= 0)
                 {
                     headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
-                    if (c->h1->resp.resp_status == RS200)
-                        headers << "Accept-Ranges: bytes\r\n";
+                    headers << "Accept-Ranges: bytes\r\n";
                 }
-        
-                if (c->h1->resp.resp_status == RS416)
-                    headers << "Content-Range: bytes */" << c->h1->resp.file_size << "\r\n";
+            }
+            else if (c->h1->resp.resp_status == RS416)
+            {
+                if (c->h1->resp.resp_content_type)
+                    headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
+                if (c->h1->resp.resp_content_len)
+                    headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
+                headers << "Content-Range: bytes */" << c->h1->resp.file_size << "\r\n";
             }
         }
     }
@@ -825,7 +834,6 @@ int create_response_headers(Connect *c)
     }
 
     c->h1->resp.headers.cpy(headers.c_str(), headers.size());
-
     return 0;
 }
 //======================================================================

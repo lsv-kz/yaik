@@ -636,33 +636,94 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
         return -1;
     if (*(p + 1) == '-')
     {
-        if (strlen(p + 2) == 0)
-            return -1;
-        sscanf(p + 2, "%lld", content_length);
+        p += 2;
+        char buf[32];
+        buf[0] = 0;
+        for (int i = 0; *p; )
+        {
+            char ch = *p;
+            if (isdigit(ch))
+            {
+                buf[i++] = ch;
+                ++p;
+            }
+            else
+            {
+                buf[i] = 0;
+                break;
+            }
+        }
+
+        if (*p != 0)
+            return 0;
+        sscanf(buf, "%lld", content_length);
         if (*content_length > file_size)
-            return -1;
+            *content_length = file_size;
         *offset = file_size - *content_length;
     }
     else
     {
-        sscanf(p + 1, "%lld", offset);
+        ++p;
+        char buf[32];
+        buf[0] = 0;
+        for (int i = 0; *p; )
+        {
+            char ch = *p;
+            if (isdigit(ch))
+            {
+                buf[i++] = ch;
+                ++p;
+            }
+            else
+            {
+                buf[i] = 0;
+                break;
+            }
+        }
+
+        if (*p != '-')
+            return 0;
+        sscanf(buf, "%lld", offset);
         if (*offset >= file_size)
-            return -1;
-        p = strchr(p + 1, '-');
-        if (p == NULL)
-            return -1;
-        if (strlen(p + 1) == 0)
+            return -RS416;
+        
+        ++p;
+        buf[0] = 0;
+        for (int i = 0; *p; )
+        {
+            char ch = *p;
+            if (isdigit(ch))
+            {
+                buf[i++] = ch;
+                ++p;
+            }
+            else
+            {
+                buf[i] = 0;
+                break;
+            }
+        }
+
+        if (*p != 0)
+            return 0;
+
+        if (strlen(buf) == 0)
+        {
+            if (*offset > (file_size - 1))
+                return -RS416;
             *content_length = file_size - *offset;
+        }
         else
         {
             long long end = 0;
-            if (sscanf(p + 1, "%lld", &end) != 1)
-                return -1;
+            sscanf(buf, "%lld", &end);
+            if (end > (file_size - 1))
+                end = file_size - 1;
             *content_length = end + 1 - *offset;
         }
     }
 
-    return 0;
+    return 1;
 }
 //======================================================================
 void resp_200(Stream *resp)
@@ -734,42 +795,24 @@ void resp_403(Stream *resp)
     resp->send_data.cat(err, len);
 }
 //======================================================================
-void resp_404(Stream *resp)
+void resp_404(Connect *c, Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     if (resp->send_headers == false)
     {
+        resp->source_data = FROM_DATA_BUFFER;
         set_frame_headers(resp);
         add_header(resp, 13);
         add_header(resp, 54, conf->ServerSoftware.c_str());
         add_header(resp, 33, get_time().c_str());
         add_header(resp, 31, "text/plain");
         resp->create_headers = true;
+        const char *err = "404 Not Found";
+        int len = strlen(err);
+        set_frame_data(resp, len, FLAG_END_STREAM);
+        resp->send_data.cat(err, len);
     }
-
-    const char *err = "404 Not Found";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_408(Stream *resp)
-{
-    resp->source_data = FROM_DATA_BUFFER;
-    if (resp->send_headers == false)
-    {
-        set_frame_headers(resp);
-        add_header(resp, 8, "408");
-        add_header(resp, 54, conf->ServerSoftware.c_str());
-        add_header(resp, 33, get_time().c_str());
-        add_header(resp, 31, "text/plain");
-        resp->create_headers = true;
-    }
-
-    const char *err = "408 Request Timeout";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
+    else
+        set_rst_stream(c, resp->id, CANCEL);
 }
 //======================================================================
 void resp_411(Stream *resp)
@@ -848,61 +891,64 @@ void resp_431(Stream *resp)
     resp->send_data.cat(err, len);
 }
 //======================================================================
-void resp_500(Stream *resp)
+void resp_500(Connect *c, Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     if (resp->send_headers == false)
     {
+        resp->source_data = FROM_DATA_BUFFER;
         set_frame_headers(resp);
         add_header(resp, 14);
         add_header(resp, 54, conf->ServerSoftware.c_str());
         add_header(resp, 33, get_time().c_str());
         add_header(resp, 31, "text/plain");
         resp->create_headers = true;
+        const char *err = "500 Internal Server Error";
+        int len = strlen(err);
+        set_frame_data(resp, len, FLAG_END_STREAM);
+        resp->send_data.cat(err, len);
     }
-
-    const char *err = "500 Internal Server Error";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
+    else
+        set_rst_stream(c, resp->id, CANCEL);
 }
 //======================================================================
-void resp_502(Stream *resp)
+void resp_502(Connect *c, Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     if (resp->send_headers == false)
     {
+        resp->source_data = FROM_DATA_BUFFER;
         set_frame_headers(resp);
         add_header(resp, 8, "502");
         add_header(resp, 54, conf->ServerSoftware.c_str());
         add_header(resp, 33, get_time().c_str());
         add_header(resp, 31, "text/plain");
         resp->create_headers = true;
+        const char *err = "502 Bad Gateway";
+        int len = strlen(err);
+        set_frame_data(resp, len, FLAG_END_STREAM);
+        resp->send_data.cat(err, len);
     }
-
-    const char *err = "502 Bad Gateway";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
+    else
+        set_rst_stream(c, resp->id, CANCEL);
 }
 //======================================================================
-void resp_504(Stream *resp)
+void resp_504(Connect *c, Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     if (resp->send_headers == false)
     {
+        resp->source_data = FROM_DATA_BUFFER;
         set_frame_headers(resp);
         add_header(resp, 8, "504");
         add_header(resp, 54, conf->ServerSoftware.c_str());
         add_header(resp, 33, get_time().c_str());
         add_header(resp, 31, "text/plain");
         resp->create_headers = true;
+        const char *err = "504 Gateway Time-out";
+        int len = strlen(err);
+        set_frame_data(resp, len, FLAG_END_STREAM);
+        resp->send_data.cat(err, len);
     }
-
-    const char *err = "504 Gateway Time-out";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
+    else
+        set_rst_stream(c, resp->id, CANCEL);
 }
 //======================================================================
 const char *http2_status_resonse(int st)

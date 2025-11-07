@@ -293,7 +293,7 @@ void thread_ssl_accept()
             if (thr_exit)
                 break;
         }
-        
+
         Connect *c = list_start, *next = NULL;
         int num_poll = 0;
         for ( ; c; c = next)
@@ -321,7 +321,7 @@ void thread_ssl_accept()
         }
         else if (ret_poll == 0)
             continue;
-    
+
         c = list_start;
         next = NULL;
         for ( int i = 0; c && (i < num_poll); ++i, c = next )

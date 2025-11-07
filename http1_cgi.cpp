@@ -435,7 +435,8 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
         }
     }
 
-    c->h1->resp.resp_status = RS200;
+    if (c->h1->resp.resp_status == 0)
+        c->h1->resp.resp_status = RS200;
     if (c->h1->resp.httpMethod == M_HEAD)
     {
         c->h1->resp.cgi.end = true;

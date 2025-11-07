@@ -175,7 +175,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                 if (resp->send_headers)
                     set_rst_stream(c, resp->id, CANCEL);
                 else
-                    resp_504(resp);
+                    resp_504(c, resp);
             }
         }
         else
@@ -189,9 +189,9 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                     {
                         print_err(c, "<%s:%d> Error cgi_create_proc()\n", __func__, __LINE__);
                         if (ret == -RS404)
-                            resp_404(resp);
+                            resp_404(c, resp);
                         else
-                            resp_500(resp);
+                            resp_500(c, resp);
                         continue;
                     }
                 }
@@ -200,7 +200,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                     int ret = fcgi_create_connect(c, resp);
                     if (ret < 0)
                     {
-                        resp_500(resp);
+                        resp_500(c, resp);
                         continue;
                     }
                 }
@@ -209,7 +209,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                     int ret = scgi_create_connect(c, resp);
                     if (ret < 0)
                     {
-                        resp_500(resp);
+                        resp_500(c, resp);
                         continue;
                     }
                 }

@@ -178,7 +178,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
     }
 }
 //======================================================================
-int EventHandlerClass::cgi_create_proc(Connect *con, Stream *resp)
+int EventHandlerClass::cgi_create_proc(Connect *c, Stream *resp)
 {
     int serv_cgi[2], cgi_serv[2];
     int n = pipe(cgi_serv);
@@ -208,7 +208,7 @@ int EventHandlerClass::cgi_create_proc(Connect *con, Stream *resp)
         serv_cgi[1] = -1;
     }
 
-    n = cgi_fork(con, resp, serv_cgi, cgi_serv);
+    n = cgi_fork(c, resp, serv_cgi, cgi_serv);
     if (n < 0)
     {
         if (resp->httpMethod == M_POST)
@@ -344,7 +344,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             {
                 print_err(resp, "<%s:%d> Error cgi.to_script=%d, fd=%d, id=%d \n", __func__, __LINE__,
                                         resp->cgi.to_script, fd, resp->id);
-                resp_500(resp);
+                resp_500(c, resp);
                 return;
             }
         }
@@ -354,7 +354,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             {
                 print_err(resp, "<%s:%d> Error cgi.fd=%d, fd=%d, 0x%02X,  id=%d \n", __func__, __LINE__,
                                         resp->cgi.fd, fd, revents, resp->id);
-                resp_502(resp);
+                resp_502(c, resp);
                 return;
             }
         }
@@ -370,7 +370,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             else if (ret < 0)
             {
                 print_err(resp, "<%s:%d> Error cgi_stdin()=%d\n", __func__, __LINE__, ret);
-                resp_502(resp);
+                resp_502(c, resp);
                 return;
             }
         }
@@ -378,7 +378,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
         {
             print_err(resp, "<%s:%d> Error events/revents=0x%02X/0x%02X, fd=%d,   id=%d \n", __func__, __LINE__,
                     events, revents, fd, resp->id);
-            resp_502(resp);
+            resp_502(c, resp);
         }
     }
     else if (resp->cgi_status == CGI_STDOUT)
@@ -389,7 +389,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             {
                 print_err(resp, "<%s:%d> Error cgi.from_script=%d, fd=%d, 0x%02X,  id=%d \n", __func__, __LINE__,
                                         resp->cgi.from_script, fd, revents, resp->id);
-                resp_502(resp);
+                resp_502(c, resp);
                 return;
             }
         }
@@ -399,7 +399,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             {
                 print_err(resp, "<%s:%d> Error cgi.fd=%d, fd=%d, 0x%02X,  id=%d \n", __func__, __LINE__,
                                         resp->cgi.fd, fd, revents, resp->id);
-                resp_502(resp);
+                resp_502(c, resp);
                 return;
             }
         }
@@ -416,7 +416,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             else if (ret < 0)
             {
                 print_err(resp, "<%s:%d> Error cgi_stdout()=%d, id=%d \n", __func__, __LINE__, ret, resp->id);
-                resp_502(resp);
+                resp_502(c, resp);
             }
             else if (ret == 0)
             {
@@ -484,6 +484,24 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                             }
                         }
 
+                        string location;
+                        if ((p3 = strstr_case(resp->buf.ptr(), "Location:")))
+                        {
+                            int i = 0;
+                            for ( ; i < 512; ++i)
+                            {
+                                char ch = *(p3 + 9 + i);
+                                if ((ch == ' ') && (location.size() == 0))
+                                    continue;
+                                else if ((ch == '\r') || (ch == '\n'))
+                                    break;
+                                else
+                                    location += ch;
+                            }
+                            if (i == 512)
+                                location.clear();
+                        }
+
                         if ((p3 = strstr_case(resp->buf.ptr(), "Content-Type:")))
                         {
                             char cont_type[64] = "NO";
@@ -505,14 +523,17 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                             set_frame_headers(resp);
                             add_header(resp, 8, http2_status_resonse(resp->resp_status));
                             add_header(resp, 54, conf->ServerSoftware.c_str());
+                            if (location.size())
+                                add_header(resp, 46, location.c_str());
                             add_header(resp, 33, get_time().c_str());
                             add_header(resp, 31, cont_type);
+                            add_header(resp, 24, "no-cache, no-store, must-revalidate");
                             resp->create_headers = true;
                             resp->buf.set_offset(p - resp->buf.ptr());
                         }
                         else
                         {
-                            resp_502(resp);
+                            resp_502(c, resp);
                         }
                     }
                     else
@@ -521,7 +542,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                         {
                             print_err(resp, "<%s:%d> Error empty line not found (read from script %d bytes), id=%d \n", 
                                             __func__, __LINE__, resp->buf.size(), resp->id);
-                            resp_502(resp);
+                            resp_502(c, resp);
                         }
                     }
                 }
@@ -549,7 +570,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             {
                 print_err(resp, "<%s:%d> Error 502 Bad Gateway, revents=0x%02X, id=%d \n", 
                             __func__, __LINE__, revents, resp->id);
-                resp_502(resp);
+                resp_502(c, resp);
                 return;
             }
 
