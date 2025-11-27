@@ -175,7 +175,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                 if (resp->send_headers)
                     set_rst_stream(c, resp->id, CANCEL);
                 else
-                    resp_504(c, resp);
+                    resp_504(resp);
             }
         }
         else
@@ -189,9 +189,9 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                     {
                         print_err(c, "<%s:%d> Error cgi_create_proc()\n", __func__, __LINE__);
                         if (ret == -RS404)
-                            resp_404(c, resp);
+                            resp_404(resp);
                         else
-                            resp_500(c, resp);
+                            resp_500(resp);
                         continue;
                     }
                 }
@@ -200,7 +200,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                     int ret = fcgi_create_connect(c, resp);
                     if (ret < 0)
                     {
-                        resp_500(c, resp);
+                        resp_500(resp);
                         continue;
                     }
                 }
@@ -209,7 +209,7 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
                     int ret = scgi_create_connect(c, resp);
                     if (ret < 0)
                     {
-                        resp_500(c, resp);
+                        resp_500(resp);
                         continue;
                     }
                 }
@@ -292,7 +292,10 @@ void EventHandlerClass::http2_cgi_poll(Connect *c, int poll_ind)
         else if (resp->cgi_type == SCGI)
         {
             if (resp->cgi_status == SCGI_PARAMS)
-                scgi_worker(c, resp, poll_ind);
+            {
+                if (scgi_worker(c, resp, poll_ind) < 0)
+                    resp_502(resp);
+            }
             else
                 cgi_worker(c, resp, poll_ind);
         }
@@ -442,7 +445,13 @@ void EventHandlerClass::http1_cgi_poll(Connect *c, int poll_ind)
         else if (c->h1->resp.cgi_type == SCGI)
         {
             if (c->h1->resp.cgi_status == SCGI_PARAMS)
-                scgi_worker(c, poll_ind);
+            {
+                if (scgi_worker(c, &c->h1->resp, poll_ind) < 0)
+                {
+                    c->err = -RS502;
+                    http1_end_request(c);
+                }
+            }
             else
                 cgi_worker(c, poll_ind);
         }

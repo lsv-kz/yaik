@@ -4,7 +4,6 @@ using namespace std;
 //======================================================================
 static int scgi_create_params(Connect *c, Stream *resp);
 static int scgi_set_param(Stream *r);
-static int scgi_set_size_data(ByteArray *ba);
 //======================================================================
 static int scgi_set_size_data(ByteArray *ba)
 {
@@ -256,7 +255,7 @@ int scgi_set_param(Stream *resp)
     return resp->cgi.buf_param.size();
 }
 //======================================================================
-void EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
+int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
 {
     int revents = poll_fd[cgi_ind_poll].revents;
     int events = poll_fd[cgi_ind_poll].revents;
@@ -267,9 +266,10 @@ void EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             int ret = write_to_fcgi(resp->cgi.fd, resp->cgi.buf_param.ptr_remain(), resp->cgi.buf_param.size_remain());
             if (ret < 0)
             {
-                if (ret != ERR_TRY_AGAIN)
-                    resp_502(c, resp);
-                return;
+                if (ret == ERR_TRY_AGAIN)
+                    return 0;
+                else
+                    return -RS502;
             }
 
             resp->cgi.timer = 0;
@@ -294,54 +294,9 @@ void EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         else
         {
             print_err(resp, "<%s:%d> Error 0x%02X(0x%02X)\n", __func__, __LINE__, revents, events);
-            resp_502(c, resp);
+            return -RS502;
         }
     }
-}
-//======================================================================
-void EventHandlerClass::scgi_worker(Connect* c, int cgi_ind_poll)
-{
-    int revents = poll_fd[cgi_ind_poll].revents;
-    int events = poll_fd[cgi_ind_poll].revents;
-    if (c->h1->resp.cgi_status == SCGI_PARAMS)
-    {
-        if (revents == POLLOUT)
-        {
-            int ret = write_to_fcgi(c->h1->resp.cgi.fd, c->h1->resp.cgi.buf_param.ptr_remain(), c->h1->resp.cgi.buf_param.size_remain());
-            if (ret < 0)
-            {
-                if (ret != ERR_TRY_AGAIN)
-                {
-                    c->err = -RS502;
-                    http1_end_request(c);
-                }
-                return;
-            }
 
-            c->h1->resp.cgi.timer = 0;
-            c->h1->resp.cgi.buf_param.set_offset(ret);
-            if (c->h1->resp.cgi.buf_param.size_remain() == 0)
-            {
-                c->h1->resp.cgi.buf_param.init();
-                if (c->h1->resp.httpMethod == M_POST)
-                {
-                    if (c->h1->resp.post_content_len <= 0)
-                        c->h1->resp.cgi_status = CGI_STDOUT;
-                    else
-                        c->h1->resp.cgi_status = CGI_STDIN;
-                }
-                else
-                {
-                    c->h1->resp.post_data.init();
-                    c->h1->resp.cgi_status = CGI_STDOUT;
-                }
-            }
-        }
-        else
-        {
-            print_err(c, "<%s:%d> Error 0x%02X(0x%02X)\n", __func__, __LINE__, revents, events);
-            c->err = -RS502;
-            http1_end_request(c);
-        }
-    }
+    return 0;
 }

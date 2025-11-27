@@ -232,7 +232,6 @@ struct http1
         hdrs.clear();
         chunk_mode = NO_CHUNK;
     }
-    
     //------------------------------------------------------------------
     const char *get_str_status()
     {
@@ -363,8 +362,7 @@ class EventHandlerClass
     void cgi_worker(Connect *c, int i);
     int cgi_stdout(Connect *c, int fd);
 
-    void scgi_worker(Connect *c, Stream *r, int i);
-    void scgi_worker(Connect *c, int i);
+    int scgi_worker(Connect *c, Stream *r, int i);
 
     void fcgi_worker(Connect *c, Stream *r, int i);
     void fcgi_get_headers(Connect *c, Stream *r);
@@ -428,8 +426,6 @@ int create_response_headers(Connect *c);
 int read_post_data(Connect *c);
 //------------------------ http1_cgi.cpp -------------------------------
 int cgi_set_size_chunk(ByteArray *ba);
-//------------------------ http1_scgi.cpp ------------------------------
-int scgi_create_connect(Connect *c);
 //------------------------ http2_cgi.cpp -------------------------------
 void kill_chld(pid_t pid);
 int is_cgi(Stream *resp);
@@ -437,7 +433,7 @@ int is_cgi(Stream *resp);
 void fcgi_set_header(ByteArray* ba, unsigned char type);
 void fcgi_set_header(char *s, unsigned char type, int dataLen);
 int fcgi_create_connect(Connect *c, Stream *r);
-//------------------------ http2_scgi.cpp-------------------------------
+//------------------------ scgi.cpp-------------------------------
 int scgi_create_connect(Connect *c, Stream *r);
 //-------------------------- config.cpp --------------------------------
 int read_conf_file(const char *path_conf);
@@ -468,7 +464,7 @@ const char *get_str_method(int i);
 const char *get_str_frame_type(FRAME_TYPE);
 const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_status(CGI_STATUS s);
-const char *get_str_error(int err);
+const char *get_http2_error(int err);
 
 int clean_path(char *path, int len);
 const char *content_type(const char *s);
@@ -488,18 +484,17 @@ int set_response(Connect *c, Stream *r);
 SOURCE_DATA get_content_type(const char *path);
 int parse_range(const char *s, long long file_size, long long *offset, long long *content_length);
 
-void resp_200(Stream *resp);
 void resp_204(Stream *resp);
 void resp_400(Stream *resp);
 void resp_403(Stream *resp);
-void resp_404(Connect *c, Stream *resp);
+void resp_404(Stream *resp);
 void resp_411(Stream *resp);
 void resp_413(Stream *resp);
 void resp_414(Stream *resp);
 void resp_431(Stream *resp);
-void resp_500(Connect *c, Stream *resp);
-void resp_502(Connect *c, Stream *resp);
-void resp_504(Connect *c, Stream *resp);
+void resp_500(Stream *resp);
+void resp_502(Stream *resp);
+void resp_504(Stream *resp);
 void hex_print_stderr(const char *s, int line, const void *p, int n);
 const char *http2_status_resonse(int st);
 //--------------------------- log.cpp ----------------------------------

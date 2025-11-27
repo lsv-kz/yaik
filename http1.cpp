@@ -200,14 +200,11 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             ret = set_response(c);
             if (ret < 0)
             {
-                if (ret != ERR_TRY_AGAIN)
-                {
-                    print_err(c, "<%s:%d> set_response()=%d\n", __func__, __LINE__, ret);
-                    c->h1->connKeepAlive = false;
-                    c->err = ret;
-                    http1_end_request(c);
-                    return -1;
-                }
+                print_err(c, "<%s:%d> set_response()=%d\n", __func__, __LINE__, ret);
+                c->h1->connKeepAlive = false;
+                c->err = ret;
+                http1_end_request(c);
+                return -1;
             }
 
             c->client_timer = 0;

@@ -167,21 +167,6 @@ public:
             return "";
     }
     //------------------------------------------------------------------
-    char *data(int n)
-    {
-        if (n < 0)
-            return NULL;
-        if (buf_size <= n)
-        {
-            if (resize(n + 64))
-                return NULL;
-        }
-
-        buf_len = 0;
-        offset = 0;
-        return buf;
-    }
-    //------------------------------------------------------------------
     int set_len(int n)
     {
         if ((n < 0) || (buf_len >= buf_size))

@@ -308,7 +308,7 @@ int set_response(Connect *c, Stream *resp)
         if (resp->clean_decode_path == NULL)
         {
             print_err(resp, "<%s:%d> Error new char [%d]: %s\n", __func__, __LINE__, len + 1, strerror(errno));
-            resp_500(c, resp);
+            resp_500(resp);
             return 0;
         }
 
@@ -336,7 +336,7 @@ int set_response(Connect *c, Stream *resp)
         if (resp->query_string.size() > 0)
         {
             print_err(resp, "<%s:%d> Error ?\n", __func__, __LINE__);
-            resp_500(c, resp);
+            resp_500(resp);
             return 0;
         }
     }
@@ -390,7 +390,7 @@ int set_response(Connect *c, Stream *resp)
             resp->cgi_type = PHPFPM;
         else
         {
-            resp_404(c, resp);
+            resp_404(resp);
             return 0;
         }
     }
@@ -407,7 +407,7 @@ int set_response(Connect *c, Stream *resp)
         if (resp->file_size < 0)
         {
             print_err(resp, "<%s:%d> Error file_size(%s)\n", __func__, __LINE__, path.c_str());
-            resp_500(c, resp);
+            resp_500(resp);
             return 0;
         }
 
@@ -475,9 +475,9 @@ int set_response(Connect *c, Stream *resp)
             if (errno == EACCES)
                 resp_403(resp);
             else if (errno == ENOENT)
-                resp_404(c, resp);
+                resp_404(resp);
             else
-                resp_500(c, resp);
+                resp_500(resp);
             return 0;
         }
 
@@ -513,7 +513,7 @@ int set_response(Connect *c, Stream *resp)
         if (err)
         {
             print_err(resp, "<%s:%d> Error index_dir(): %d\n", __func__, __LINE__, err);
-            resp_500(c, resp);
+            resp_500(resp);
             return 0;
         }
         resp->resp_content_len = resp->buf.size();
@@ -546,7 +546,7 @@ int set_response(Connect *c, Stream *resp)
         {
             print_err(resp, "<%s:%d> Error: CONTENT_TYPE %s, create_headers=%d, send_headers=%d\n", 
                         __func__, __LINE__, path.c_str(), resp->create_headers, resp->send_headers);
-            resp_404(c, resp);
+            resp_404(resp);
         }
         else
         {
@@ -875,7 +875,7 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             print_err(resp, "<%s:%d> !!! Error: cont_length=%lld, body_len=%d, size=%d, id=%d \n", __func__, __LINE__,
                         resp->post_content_len, body_len, resp->post_data.size(), resp->id);
-            resp_500(c, resp);
+            resp_500(resp);
             return 0;
         }
     }
@@ -920,7 +920,7 @@ int EventHandlerClass::parse_frame(Connect *c)
     {
         if (conf->PrintDebugMsg)
         {
-            print_err(c, "recv GOAWAY [%s]\n", get_str_error(c->h2->body.get_byte(7)));
+            print_err(c, "recv GOAWAY [%s]\n", get_http2_error(c->h2->body.get_byte(7)));
         }
 
         return -1;
@@ -928,7 +928,7 @@ int EventHandlerClass::parse_frame(Connect *c)
     else if (c->h2->type == RST_STREAM)
     {
         c->client_timer = 0;
-        print_err(c, "recv RST_STREAM [%s] id=%d \n", get_str_error(c->h2->body.get_byte(3)), c->h2->id);
+        print_err(c, "recv RST_STREAM [%s] id=%d \n", get_http2_error(c->h2->body.get_byte(3)), c->h2->id);
         if (c->h2->id == 0)
         {
             set_frame_goaway(c, PROTOCOL_ERROR);
