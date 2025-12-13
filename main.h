@@ -212,12 +212,14 @@ struct http1
     String hdrs;
     CHUNK_MODE chunk_mode;
     bool connKeepAlive;
+    bool try_again;
     //------------------------------------------------------------------
     http1()
     {
         connKeepAlive = true;
         hdrs.clear();
         chunk_mode = NO_CHUNK;
+        try_again = false;
     }
     //------------------------------------------------------------------
     ~http1()
@@ -372,9 +374,9 @@ class EventHandlerClass
 
     void http1_end_request(Connect *c);
 
-    void http2_cgi_set(Connect *c);
+    int http2_cgi_set(Connect *c);
     void http2_cgi_poll(Connect *c, int);
-    void http1_cgi_set(Connect *c);
+    int http1_cgi_set(Connect *c);
     void http1_cgi_poll(Connect *c, int);
 
 public:
@@ -388,9 +390,6 @@ public:
     void add_work_list();
 
     void dec_all_cgi();
-
-    int http2_cgi_poll();
-    int http1_cgi_poll();
 
     int cgi_poll();
 
@@ -444,7 +443,6 @@ void setDataBufSize(int n);
 int index_dir(Connect *c, std::string& path, const char *uri, ByteArray *b);
 //----------------------- percent_coding.cpp----------------------------
 int encode(const char *s_in, char *s_out, int len_out);
-int decode(char *s_in);
 int decode(const char *s_in, int len_in, std::string& s_out);
 //------------------------- function.cpp -------------------------------
 std::string get_time();

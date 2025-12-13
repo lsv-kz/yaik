@@ -524,7 +524,7 @@ int set_response(Connect *c, Stream *resp)
         add_header(resp, 8);                                          // "200 OK"
         add_header(resp, 54, conf->ServerSoftware.c_str());           // "server"
         add_header(resp, 33, get_time().c_str());                     // "date"
-        add_header(resp, 31, "text/html;charset=UTF-8");                            // "content-type"
+        add_header(resp, 31, "text/html;charset=UTF-8");              // "content-type"
         add_header(resp, 24, "no-cache, no-store, must-revalidate");  // "cache-control"
         resp->create_headers = true;
 
@@ -711,7 +711,7 @@ int EventHandlerClass::recv_frame_(Connect *c)
         {
             if (ret == ERR_TRY_AGAIN)
                 print_err(c, "<%s:%d> Error (SSL_ERROR_WANT_READ) read frame %s id=%d \n", 
-                        __func__, __LINE__, get_str_frame_type(c->h2->type), c->h2->id);
+                            __func__, __LINE__, get_str_frame_type(c->h2->type), c->h2->id);
             else
                 print_err(c, "<%s:%d> Error read frame %s id=%d \n", __func__, __LINE__, 
                             get_str_frame_type(c->h2->type), c->h2->id);
@@ -1093,19 +1093,21 @@ int EventHandlerClass::send_frames_(Connect *c)
                 if (ret < 0)
                     return ret;
             }
-
-            if (resp->headers.size())
+            else
             {
-                int ret = send_frame_headers(c, resp);
-                if (ret < 0)
-                    return ret;
-            }
+                if (resp->headers.size())
+                {
+                    int ret = send_frame_headers(c, resp);
+                    if (ret < 0)
+                        return ret;
+                }
 
-            if (resp->send_headers && (!resp->send_end_stream))
-            {
-                int ret = send_frame_data(c, resp);
-                if (ret < 0)
-                    return ret;
+                if (resp->send_headers && (!resp->send_end_stream))
+                {
+                    int ret = send_frame_data(c, resp);
+                    if (ret < 0)
+                        return ret;
+                }
             }
 
             if (c->h2->work_stream)

@@ -512,18 +512,24 @@ int read_conf_file(FILE *fconf)
         return -1;
     }
     //------------------------------------------------------------------
-    if (conf->MaxCgiProc == 0)
+    if (conf->MaxCgiProc <= 0)
     {
-        fprintf(stderr, "<%s:%d> Error: MaxCgiProc=0\n", __func__, __LINE__);
-        return -1;
-    }
-    //------------------------------------------------------------------
-    if (conf->MaxAcceptConnections <= 0)
-    {
-        fprintf(stderr, "<%s:%d> Error config file: MaxAcceptConnections=%d\n", __func__, __LINE__, conf->MaxAcceptConnections);
+        fprintf(stderr, "<%s:%d> Error: MaxCgiProc=%d\n", __func__, __LINE__, conf->MaxCgiProc);
         return -1;
     }
 
+    if (conf->MaxAcceptConnections <= 0)
+    {
+        fprintf(stderr, "<%s:%d> Error: MaxAcceptConnections=%d\n", __func__, __LINE__, conf->MaxAcceptConnections);
+        return -1;
+    }
+
+    if (conf->MaxCgiProc > conf->MaxAcceptConnections)
+    {
+        fprintf(stderr, "<%s:%d> Error: MaxCgiProc[%d] > MaxAcceptConnections[%d]\n", __func__, __LINE__, conf->MaxCgiProc, conf->MaxAcceptConnections);
+        return -1;
+    }
+    //------------------------------------------------------------------
     const int fd_std = 3, fd_logs = 2, fd_sock = 1;
     long min_open_fd = fd_std + fd_logs + fd_sock;
     int max_fd = min_open_fd + conf->MaxAcceptConnections + conf->MaxAcceptConnections * conf->MaxConcurrentStreams + conf->MaxCgiProc * 2;

@@ -96,18 +96,17 @@ int EventHandlerClass::cgi_poll()
         next = c->next;
         if (c->Protocol == P_HTTP1)
         {
-            http1_cgi_set(c);
+            if (c->h1->con_status < http1::READ_POSTDATA)
+                continue;
+            if (http1_cgi_set(c))
+                break;
         }
         else if (c->Protocol == P_HTTP2)
         {
-            http2_cgi_set(c);
-        }
-
-        if (num_poll >= conf->MaxAcceptConnections)
-        {
-            print_err(c, "<%s:%d> !!! num_poll[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__, 
-                    num_poll, conf->MaxAcceptConnections);
-            break;
+            if ((c->h2->try_again == true) || (c->h2->con_status != http2::PROCESSING_REQUESTS))
+                continue;
+            if (http2_cgi_set(c))
+                break;
         }
     }
 
@@ -141,28 +140,27 @@ int EventHandlerClass::cgi_poll()
     return 0;
 }
 //======================================================================
-void EventHandlerClass::http2_cgi_set(Connect *c)
+int EventHandlerClass::http2_cgi_set(Connect *c)
 {
     time_t t = time(NULL);
     Stream *resp_next = NULL, *resp = c->h2->get();
     if (!resp)
     {
-        return;
+        return 0;
     }
 
     for ( ; resp; resp = resp_next)
     {
         resp_next = resp->next;
 
+        if (num_poll >= conf->MaxCgiProc)
+            return 1;
+
         if ((resp->source_data != DYN_PAGE) || resp->cgi.end)
             continue;
-
-        if (num_poll >= conf->MaxAcceptConnections)
-            break;
-
-        if ((resp->cgi.timer == 0) || (resp->cgi.start == false))
+        if ((resp->cgi.timer == 0) && resp->cgi.start)
             resp->cgi.timer = t;
-        if ((t - resp->cgi.timer) >= conf->TimeoutCGI)
+        if (resp->cgi.start && ((t - resp->cgi.timer) >= conf->TimeoutCGI))
         {
             print_err(resp, "<%s:%d> TimeoutCGI=%ld, send_headers=%d, cgi.op=%s, id=%d \n", __func__, __LINE__, 
                     t - resp->cgi.timer, resp->send_headers, get_cgi_status(resp->cgi_status), resp->id);
@@ -245,22 +243,27 @@ void EventHandlerClass::http2_cgi_set(Connect *c)
             }
             else if ((resp->cgi_status == CGI_STDOUT) && (resp->send_data.size() == 0))
             {
-                if ((resp->cgi_type == CGI) || (resp->cgi_type == PHPCGI))
+                if (c->h2->try_again == false)
                 {
-                    poll_fd[num_poll].fd = resp->cgi.from_script;
-                }
-                else
-                {
-                    poll_fd[num_poll].fd = resp->cgi.fd;
-                }
+                    if ((resp->cgi_type == CGI) || (resp->cgi_type == PHPCGI))
+                    {
+                        poll_fd[num_poll].fd = resp->cgi.from_script;
+                    }
+                    else
+                    {
+                        poll_fd[num_poll].fd = resp->cgi.fd;
+                    }
 
-                poll_fd[num_poll].events = POLLIN;
-                conn_array[num_poll] = c;
-                cgi_array[num_poll] = resp;
-                ++num_poll;
+                    poll_fd[num_poll].events = POLLIN;
+                    conn_array[num_poll] = c;
+                    cgi_array[num_poll] = resp;
+                    ++num_poll;
+                }
             }
         }
     }
+
+    return 0;
 }
 //======================================================================
 void EventHandlerClass::http2_cgi_poll(Connect *c, int poll_ind)
@@ -311,14 +314,17 @@ void EventHandlerClass::http2_cgi_poll(Connect *c, int poll_ind)
     }
 }
 //======================================================================
-void EventHandlerClass::http1_cgi_set(Connect *c)
+int EventHandlerClass::http1_cgi_set(Connect *c)
 {
     time_t t = time(NULL);
 
     if ((c->h1->resp.source_data != DYN_PAGE) || c->h1->resp.cgi.end)
     {
-        return;
+        return 0;
     }
+
+    if (num_poll >= conf->MaxCgiProc)
+        return 1;
 
     if ((c->h1->resp.cgi.timer == 0) || (c->h1->resp.cgi.start == false))
             c->h1->resp.cgi.timer = t;
@@ -332,7 +338,7 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
             c->err = -1;
         c->h1->resp.cgi.end = true;
         http1_end_request(c);
-        return;
+        return 0;
     }
 
     if ((c->h1->resp.cgi_status == CGI_CREATE) && (all_cgi < conf->MaxCgiProc) && (all_cgi >= 0))
@@ -346,7 +352,7 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
                 c->err = ret;
                 c->h1->resp.cgi.end = true;
                 http1_end_request(c);
-                return;
+                return 0;
             }
         }
         else if (c->h1->resp.cgi_type == SCGI)
@@ -358,7 +364,7 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
                 c->err = ret;
                 c->h1->resp.cgi.end = true;
                 http1_end_request(c);
-                return;
+                return 0;
             }
         }
         else if ((c->h1->resp.cgi_type == PHPFPM) || (c->h1->resp.cgi_type == FASTCGI))
@@ -369,7 +375,7 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
                 c->err = ret;
                 c->h1->resp.cgi.end = true;
                 http1_end_request(c);
-                return;
+                return 0;
             }
         }
         else
@@ -377,14 +383,14 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
             print_err(c, "<%s:%d> 404 Not Found\n", __func__, __LINE__);
             c->err = -RS404;
             http1_end_request(c);
-            return;
+            return 0;
         }
 
         c->h1->chunk_mode = (c->h1->connKeepAlive) ? CHUNK : NO_CHUNK;
         c->client_timer = 0;
         c->h1->resp.cgi.start = true;
         ++all_cgi;
-        //return;
+        //return 0;
     }
 
     if ((c->h1->resp.cgi_status == FASTCGI_BEGIN) || 
@@ -415,7 +421,7 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
         ++num_poll;
     }
     else if ((c->h1->resp.cgi_status == CGI_STDOUT) && 
-             ((c->h1->resp.send_data.size_remain() == 0) || (c->h1->resp.create_headers == false))
+             ((c->h1->resp.send_data.size() == 0) || (c->h1->resp.create_headers == false))
     )
     {
         if ((c->h1->resp.cgi_type == CGI) || (c->h1->resp.cgi_type == PHPCGI))
@@ -432,6 +438,8 @@ void EventHandlerClass::http1_cgi_set(Connect *c)
         cgi_array[num_poll] = &c->h1->resp;
         ++num_poll;
     }
+
+    return 0;
 }
 //======================================================================
 void EventHandlerClass::http1_cgi_poll(Connect *c, int poll_ind)

@@ -2,11 +2,12 @@
 
 using namespace std;
 //======================================================================
-static mutex mtx_conn;
-static condition_variable cond_close_conn;
+static mutex mtx_num_conn;
+static condition_variable cond_num_conn;
 
-static mutex mtx_;
-static condition_variable cond_;
+static mutex mtx_list;
+static condition_variable cond_list;
+
 static Connect *list_start;
 static Connect *list_end;
 
@@ -17,7 +18,7 @@ static void thread_ssl_accept();
 //======================================================================
 static void push_list(Connect *c)
 {
-mtx_.lock();
+mtx_list.lock();
     c->next = NULL;
     c->prev = list_end;
     if (list_end)
@@ -25,13 +26,13 @@ mtx_.lock();
     list_end = c;
     if (!list_start)
         list_start = c;
-mtx_.unlock();
-    cond_.notify_one();
+mtx_list.unlock();
+    cond_list.notify_one();
 }
 //======================================================================
 static void delete_from_list(Connect *c)
 {
-mtx_.lock();
+mtx_list.lock();
     if (!c->next && !c->prev)
     {
         list_start = list_end = NULL;
@@ -51,30 +52,30 @@ mtx_.lock();
         list_start = c->next;
         c->next->prev = NULL;
     }
-mtx_.unlock();
+mtx_list.unlock();
 }
 //======================================================================
 static void start_conn()
 {
-mtx_conn.lock();
+mtx_num_conn.lock();
     ++num_conn;
-mtx_conn.unlock();
+mtx_num_conn.unlock();
 }
 //======================================================================
 void decrement_num_conn()
 {
-mtx_conn.lock();
+mtx_num_conn.lock();
     --num_conn;
-mtx_conn.unlock();
-    cond_close_conn.notify_one();
+mtx_num_conn.unlock();
+    cond_num_conn.notify_one();
 }
 //======================================================================
 static void is_maxconn()
 {
-unique_lock<mutex> lk(mtx_conn);
+unique_lock<mutex> lk(mtx_num_conn);
     while (num_conn >= conf->MaxAcceptConnections)
     {
-        cond_close_conn.wait(lk);
+        cond_num_conn.wait(lk);
     }
 }
 //======================================================================
@@ -131,8 +132,8 @@ void accept_connect(int serverSocket)
         if (ret_poll < 0)
         {
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
-            //if (errno == EINTR)
-                //continue;
+            if (errno == EINTR)
+                continue;
             break;
         }
         else if (ret_poll == 0)
@@ -239,7 +240,7 @@ void accept_connect(int serverSocket)
                 if (con->h1)
                 {
                     con->h1->con_status = http1::READ_REQUEST;
-                    con->h1->resp.numConn = con->numReq;
+                    con->h1->resp.numConn = con->numConn;
                     con->h1->resp.numReq = 1;
                     start_conn();
                     push_wait_list(con);
@@ -253,7 +254,7 @@ void accept_connect(int serverSocket)
                 }
             }
         }
-        else if (poll_fd[0].revents & POLLERR)
+        else// if (poll_fd[0].revents & (POLLERR | POLLHUP | POLLNVAL))
         {
             print_err("<%s:%d> Error revents=0x%02X\n", __func__, __LINE__, poll_fd[0].revents);
             break;
@@ -261,7 +262,7 @@ void accept_connect(int serverSocket)
     }
 
     thr_exit = 1;
-    cond_.notify_one();
+    cond_list.notify_one();
     thr_accept.join();
     close_work_thread();
     work_thr.join();
@@ -282,10 +283,10 @@ void thread_ssl_accept()
     for ( ; ; )
     {
         {
-    unique_lock<mutex> lk(mtx_);
+    unique_lock<mutex> lk(mtx_list);
             while (!list_start)
             {
-                cond_.wait(lk);
+                cond_list.wait(lk);
                 if (thr_exit)
                     break;
             }
@@ -333,7 +334,6 @@ void thread_ssl_accept()
                 int ret = ssl_accept(c);
                 if (ret == 1)
                 {
-                    delete_from_list(c);
                     c->tls.poll_events = POLLIN;
                     c->client_timer = 0;
                     if (c->Protocol == P_HTTP2)
@@ -343,6 +343,7 @@ void thread_ssl_accept()
                         {
                             c->h2->con_status = http2::PREFACE_MESSAGE;
                             c->numReq = 0;
+                            delete_from_list(c);
                             push_wait_list(c);
                         }
                         else
@@ -357,8 +358,9 @@ void thread_ssl_accept()
                         if (c->h1)
                         {
                             c->h1->con_status = http1::READ_REQUEST;
-                            c->h1->resp.numConn = c->numReq;
+                            c->h1->resp.numConn = c->numConn;
                             c->h1->resp.numReq = 1;
+                            delete_from_list(c);
                             push_wait_list(c);
                         }
                         else
@@ -370,10 +372,7 @@ void thread_ssl_accept()
                     else
                     {
                         print_err(c, "<%s:%d> Error Protocol\n", __func__, __LINE__);
-                        SSL_free(c->tls.ssl);
-                        shutdown(c->clientSocket, SHUT_RDWR);
-                        close(c->clientSocket);
-                        delete c;
+                        close_connect(c);
                     }
                 }
                 else if (ret < 0)
@@ -404,7 +403,6 @@ void close_connect(Connect *c)
 
     shutdown(c->clientSocket, SHUT_RDWR);
     close(c->clientSocket);
-    delete_from_list(c);
     delete c;
     decrement_num_conn();
 }
@@ -412,6 +410,6 @@ void close_connect(Connect *c)
 void Exit(int n)
 {
     thr_exit = 1;
-    cond_.notify_one();
+    cond_list.notify_one();
     exit(n);
 }
