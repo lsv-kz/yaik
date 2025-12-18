@@ -354,6 +354,11 @@ class EventHandlerClass
     int send_frame_ping(Connect *c);
     int send_frame_rststream(Connect *c);
 
+    void http1_set_poll(Connect *c);
+    void http2_set_poll(Connect *c);
+    int http1_poll(Connect *c, int);
+    int http2_poll(Connect *c, int);
+
     void cgi_worker(Connect *c, Stream *r, int i);
     int cgi_create_proc(Connect *c, Stream *r);
     int cgi_fork(Connect *c, Stream *r, int* serv_cgi, int* cgi_serv);
@@ -374,10 +379,13 @@ class EventHandlerClass
 
     void http1_end_request(Connect *c);
 
-    int http2_cgi_set(Connect *c);
-    void http2_cgi_poll(Connect *c, int);
     int http1_cgi_set(Connect *c);
     void http1_cgi_poll(Connect *c, int);
+    int http2_cgi_set(Connect *c);
+    void http2_cgi_poll(Connect *c, int);
+
+    void ssl_shutdown(Connect *c);
+    void close_connect(Connect *c);
 
 public:
 
@@ -385,25 +393,14 @@ public:
     ~EventHandlerClass();
 
     void init();
+
     int wait_connection();
-
     void add_work_list();
-
-    void dec_all_cgi();
-
     int cgi_poll();
-
-    void http2_set_poll(Connect *c);
-    void http1_set_poll(Connect *c);
     void set_poll();
-
-    int http2_poll(Connect *c, int);
-    int http1_poll(Connect *c, int);
     int _poll();
 
-    void close_connect(Connect *c);
-    void ssl_shutdown(Connect *c);
-
+    void dec_all_cgi();
     void push_wait_list(Connect *c);
     void close_event_handler();
     void close_connections();

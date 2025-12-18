@@ -73,7 +73,7 @@ class String
         append(s, strlen(s));
     }
     //------------------------------------------------------------------
-    void append(const char *s, unsigned int len)
+    __attribute__((noinline)) void append(const char *s, unsigned int len)
     {
         if ((s == NULL) || (len == 0) || err)
             return;

@@ -783,13 +783,13 @@ int EventHandlerClass::_poll()
         Connect *c = conn_array[i];
         if (poll_fd[i].revents == 0)
             continue;
-        if (c->Protocol == P_HTTP2)
-        {
-            http2_poll(c, i);
-        }
-        else if (c->Protocol == P_HTTP1)
+        if (c->Protocol == P_HTTP1)
         {
             http1_poll(c, poll_fd[i].revents);
+        }
+        else if (c->Protocol == P_HTTP2)
+        {
+            http2_poll(c, i);
         }
         else
         {
