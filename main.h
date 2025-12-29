@@ -101,13 +101,13 @@ enum CHUNK_MODE { NO_CHUNK, CHUNK, CHUNK_END };
 //======================================================================
 struct http2
 {
-    enum HTTP2_STATUS {
+    enum HTTP2_STATUS
+    {
         SSL_ACCEPT = 1,
-        SSL_SHUTDOWN,
         PREFACE_MESSAGE,
-        RECV_SETTINGS,
-        SEND_SETTINGS,
+        SET_SETTINGS,
         PROCESSING_REQUESTS,
+        SSL_SHUTDOWN,
     } con_status;
 
     Stream *start_stream;
@@ -132,7 +132,6 @@ struct http2
     char header[9];
     int header_len;
 
-    ByteArray frame;
     ByteArray body;
     ByteArray goaway;
     ByteArray ping;
@@ -141,7 +140,10 @@ struct http2
 
     DynamicTable *dyn_tab;
 
-    bool ack_recv;
+    bool recv_settings;
+    bool recv_settings_ack;
+    bool send_settings_ack;
+
     bool try_again;
     //----------------------
     void init()
@@ -173,10 +175,8 @@ struct http2
                 return "SSL_ACCEPT";
             case http2::PREFACE_MESSAGE:
                 return "PREFACE_MESSAGE";
-            case http2::RECV_SETTINGS:
-                return "RECV_SETTINGS";
-            case http2::SEND_SETTINGS:
-                return "SEND_SETTINGS";
+            case http2::SET_SETTINGS:
+                return "SET_SETTINGS";
             case http2::PROCESSING_REQUESTS:
                 return "PROCESSING_REQUESTS";
             case http2::SSL_SHUTDOWN:

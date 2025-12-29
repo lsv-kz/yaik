@@ -396,13 +396,12 @@ int set_response(Connect *c, Stream *resp)
     }
     else
     {
-        path += resp->decode_path;
+        path += resp->clean_decode_path;
         resp->source_data = get_content_type(path.c_str());
     }
 
     if (resp->source_data == FROM_FILE)
     {
-        // ----- file -----
         resp->file_size = (long long)file_size(path.c_str());
         if (resp->file_size < 0)
         {
@@ -578,7 +577,7 @@ int EventHandlerClass::http2_connection(Connect *c)
             if (conf->PrintDebugMsg)
                 hex_print_stderr(__func__, __LINE__, buf, 24);
             c->client_timer = 0;
-            c->h2->con_status = http2::SEND_SETTINGS;
+            c->h2->con_status = http2::SET_SETTINGS;
             c->h2->init();
             c->tls.poll_events = POLLOUT;
         }
@@ -782,19 +781,28 @@ int EventHandlerClass::parse_frame(Connect *c)
             }
 
             c->h2->connect_window_size += c->h2->init_window_size;
-        }
-
-        if (c->h2->header[4] == FLAG_ACK)
-        {
-            if (conf->PrintDebugMsg)
-                print_err(c, "recv SETTINGS flag=ACK\n");
-            c->h2->ack_recv = true;
-            c->h2->con_status = http2::PROCESSING_REQUESTS;
+            c->h2->recv_settings = true;
+            if (c->h2->settings.size() == 0)
+                c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
         }
         else
         {
-            c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
-            c->h2->con_status = http2::SEND_SETTINGS;
+            if (c->h2->header[4] == FLAG_ACK)
+            {
+                if (conf->PrintDebugMsg)
+                    print_err(c, "recv SETTINGS flag=ACK\n");
+                c->h2->recv_settings_ack = true;
+                if (c->h2->recv_settings_ack && c->h2->send_settings_ack)
+                {
+                    c->h2->con_status = http2::PROCESSING_REQUESTS;
+                }
+            }
+            else
+            {
+                print_err(c, "<%s:%d> frame SETTINGS: size=0, flags=0\n", __func__, __LINE__);
+                set_frame_goaway(c, CANCEL);
+                return 0;
+            }
         }
     }
     else if (c->h2->type == DATA)
@@ -1015,7 +1023,7 @@ void EventHandlerClass::send_frames(Connect *c)
 //======================================================================
 int EventHandlerClass::send_frames_(Connect *c)
 {
-    if (c->h2->con_status == http2::SEND_SETTINGS)
+    if (c->h2->con_status == http2::SET_SETTINGS)
     {
         if (c->h2->settings.size() == 0)
         {
@@ -1289,11 +1297,24 @@ int EventHandlerClass::send_frame_settings(Connect *c)
     c->h2->settings.set_offset(ret);
     if (c->h2->settings.size_remain())
         return ERR_TRY_AGAIN;
-    c->h2->settings.init();
-    if (c->h2->ack_recv)
-        c->h2->con_status = http2::PROCESSING_REQUESTS;
+    if (c->h2->settings.get_byte(4) == 1)
+    {
+        c->h2->send_settings_ack = true;
+        c->h2->settings.init();
+    }
     else
-        c->h2->con_status = http2::RECV_SETTINGS;
+    {
+        if (c->h2->recv_settings)
+            c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
+        else
+            c->h2->settings.init();
+    }
+    
+    if (c->h2->send_settings_ack && c->h2->recv_settings_ack)
+    {
+        c->h2->con_status = http2::PROCESSING_REQUESTS;
+    }
+
     return 0;
 }
 //======================================================================

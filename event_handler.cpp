@@ -646,7 +646,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
         if (conf->SecureConnect)
         {
             int ret = 0, pending = 0;
-            while ((pending = SSL_pending(c->tls.ssl)) && (c->h2->con_status != http2::SEND_SETTINGS))
+            while ((pending = SSL_pending(c->tls.ssl)))
             {
                 if (conf->PrintDebugMsg)
                 {
@@ -654,7 +654,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                                 pending, c->h2->get_str_status());
                 }
 
-                if ((c->h2->con_status == http2::RECV_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
+                if ((c->h2->con_status == http2::SET_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
                 {
                     if (c->h2->goaway.size())
                     {
@@ -699,10 +699,14 @@ void EventHandlerClass::http2_set_poll(Connect *c)
             else
                 poll_fd[num_poll].events = c->tls.poll_events;
         }
-        else if ((c->h2->con_status == http2::PREFACE_MESSAGE) || (c->h2->con_status == http2::RECV_SETTINGS))
+        else if (c->h2->con_status == http2::PREFACE_MESSAGE)
             poll_fd[num_poll].events = POLLIN;
-        else if (c->h2->con_status == http2::SEND_SETTINGS)
-            poll_fd[num_poll].events = POLLOUT;
+        else if (c->h2->con_status == http2::SET_SETTINGS)
+        {
+            poll_fd[num_poll].events = POLLIN;
+            if (c->h2->settings.size_remain())
+                poll_fd[num_poll].events |= POLLOUT;
+        }
         else // con_status = PROCESSING_REQUESTS
         {
             if (c->h2->goaway.size() || c->h2->ping.size() || c->h2->start_list_send_frame || c->h2->try_again)
@@ -835,7 +839,7 @@ int EventHandlerClass::http2_poll(Connect *c, int conn_ind)
             if (http2_connection(c) < 0)
                 return -1;
         }
-        else if ((c->h2->con_status == http2::RECV_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
+        else if ((c->h2->con_status == http2::SET_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
         {
             if (recv_frame(c) < 0)
                 return -1;
@@ -848,7 +852,7 @@ int EventHandlerClass::http2_poll(Connect *c, int conn_ind)
         {
             http2_connection(c);
         }
-        else if ((c->h2->con_status == http2::SEND_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
+        else if ((c->h2->con_status == http2::SET_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
         {
             send_frames(c);
         }

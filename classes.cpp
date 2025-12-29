@@ -3,7 +3,8 @@
 //======================================================================
 http2::http2()
 {
-    try_again = ack_recv = false;
+    recv_settings = recv_settings_ack = send_settings_ack = false;
+    try_again = false;
     header_len = id = body_len = 0;
     init_window_size = 65535;
     connect_window_size = 0;

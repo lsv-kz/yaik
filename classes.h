@@ -5,7 +5,8 @@
 #include <iostream>
 #include "bytes_array.h"
 //======================================================================
-enum HTTP_METHOD {
+enum HTTP_METHOD
+{
     M_NULL, M_GET, M_HEAD, M_POST, M_OPTIONS, M_PUT,
     M_PATCH, M_DELETE, M_TRACE, M_CONNECT
 };
