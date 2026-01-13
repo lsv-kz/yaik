@@ -100,7 +100,7 @@ class String
     }
     //------------------------------------------------------------------
     template <typename T>
-    void append(T t)
+    __attribute__((noinline)) void append(T t)
     {
         const unsigned int size_ = 21;
         char s[size_];
@@ -121,7 +121,6 @@ class String
         if (minus)
             s[--cnt] = '-';
         append(s + cnt);
-//fprintf(stdout, "<%s:%d> -------------\n", __func__, __LINE__);
     }
     //------------------------------------------------------------------
     void init()

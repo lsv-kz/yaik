@@ -179,14 +179,14 @@ int fcgi_create_params(Connect *c, Stream *resp)
     }
 
     param.name = "SCRIPT_NAME";
-    param.val = resp->cgi.scriptName;
+    param.val = resp->clean_decode_path;
     resp->cgi.vPar.push_back(param);
     ++i;
 
     if (resp->cgi_type == PHPFPM)
     {
         param.name = "SCRIPT_FILENAME";
-        param.val = conf->DocumentRoot + resp->cgi.scriptName;
+        param.val = conf->DocumentRoot + resp->clean_decode_path;
         resp->cgi.vPar.push_back(param);
         ++i;
     }
@@ -211,10 +211,7 @@ int fcgi_create_params(Connect *c, Stream *resp)
     }
 
     param.name = "QUERY_STRING";
-    if (resp->query_string.size())
-        param.val = resp->query_string;
-    else
-        param.val = "";
+    param.val = resp->query_string;
     resp->cgi.vPar.push_back(param);
     ++i;
 

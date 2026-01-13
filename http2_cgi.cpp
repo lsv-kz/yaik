@@ -12,12 +12,12 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
     if (resp->cgi_type == CGI)
     {
         resp->cgi.path = conf->ScriptPath;
-        resp->cgi.path += get_script_name(resp->cgi.scriptName.c_str());
+        resp->cgi.path += get_script_name(resp->clean_decode_path);
     }
     else if (resp->cgi_type == PHPCGI)
     {
         resp->cgi.path = conf->DocumentRoot;
-        resp->cgi.path += resp->cgi.scriptName;
+        resp->cgi.path += resp->clean_decode_path;
     }
 
     if (stat(resp->cgi.path.c_str(), &st) == -1)
@@ -86,7 +86,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
         setenv("REMOTE_PORT", c->remotePort, 1);
         setenv("REQUEST_URI", resp->path.c_str(), 1);
         setenv("DOCUMENT_URI", resp->clean_decode_path, 1);
-        setenv("SCRIPT_NAME", resp->cgi.scriptName.c_str(), 1);
+        setenv("SCRIPT_NAME", resp->clean_decode_path, 1);
         setenv("SCRIPT_FILENAME", resp->cgi.path.c_str(), 1);
 
         if (resp->host.size())
@@ -112,7 +112,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
         {
             execl(resp->cgi.path.c_str(), base_name(resp->cgi.path.c_str()), NULL);
             print_err(resp, "<%s:%d> Error execl(%s, %s): %s\n", __func__, __LINE__,
-                        resp->cgi.path.c_str(), base_name(resp->cgi.scriptName.c_str()), strerror(errno));
+                        resp->cgi.path.c_str(), base_name(resp->clean_decode_path), strerror(errno));
         }
         else if (resp->cgi_type == PHPCGI)
         {
@@ -323,7 +323,6 @@ int is_cgi(Stream *resp)
         return -1;
     }
 
-    resp->cgi.scriptName = resp->clean_decode_path;
     resp->source_data = DYN_PAGE;
     resp->resp_status = RS200;
 

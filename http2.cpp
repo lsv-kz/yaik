@@ -292,7 +292,21 @@ int set_frame_data(Connect *c, Stream *resp)
 int set_response(Connect *c, Stream *resp)
 {
     resp->send_bytes = 0;
-    decode(resp->path.c_str(), resp->path.size(), resp->decode_path);
+    int path_len = 0;
+    resp->decode_query_string = "";
+    const char *p = strchr(resp->path.c_str(), '?');
+    if (p)
+    {
+        resp->query_string = p + 1;
+        path_len = p - resp->path.c_str();
+    }
+    else
+    {
+        resp->query_string = "";
+        path_len = resp->path.size();
+    }
+
+    decode(resp->path.c_str(), path_len, resp->decode_path);
 
     int len = resp->decode_path.size();
     if (len >= resp->clean_decode_path_size)
@@ -315,30 +329,12 @@ int set_response(Connect *c, Stream *resp)
         resp->clean_decode_path_size = len + 1;
     }
 
-    const char *p = strchr(resp->path.c_str(), '?');
-    if (p)
-        resp->query_string = p + 1;
-    else
-        resp->query_string = "";
-
     memcpy(resp->clean_decode_path, resp->decode_path.c_str(), len);
     resp->clean_decode_path[len] = 0;
-    p = (const char*)memchr(resp->clean_decode_path, '?', len);
-    if (p)
+
+    if (resp->query_string.size())
     {
-        len = p - resp->clean_decode_path;
-        resp->decode_query_string = p + 1;
-        resp->clean_decode_path[len] = 0;
-    }
-    else
-    {
-        resp->decode_query_string = NULL;
-        if (resp->query_string.size() > 0)
-        {
-            print_err(resp, "<%s:%d> Error ?\n", __func__, __LINE__);
-            resp_500(resp);
-            return 0;
-        }
+        decode(resp->query_string.c_str(), resp->query_string.size(), resp->decode_query_string);
     }
 
     int err = clean_path(resp->clean_decode_path, len);
@@ -378,12 +374,10 @@ int set_response(Connect *c, Stream *resp)
     {
         resp->source_data = DYN_PAGE;
         resp->cgi_type = CGI;
-        resp->cgi.scriptName = resp->clean_decode_path;
     }
     else if (strstr(resp->clean_decode_path, ".php"))
     {
         resp->source_data = DYN_PAGE;
-        resp->cgi.scriptName = resp->clean_decode_path;
         if (conf->UsePHP == "php-cgi")
             resp->cgi_type = PHPCGI;
         else if (conf->UsePHP == "php-fpm")
@@ -485,13 +479,14 @@ int set_response(Connect *c, Stream *resp)
     }
     else if (resp->source_data == DIRECTORY)
     {
-        if (resp->decode_path[resp->decode_path.size() - 1] != '/')
+        if (resp->clean_decode_path[strlen(resp->clean_decode_path) - 1] != '/')
         {
+            resp->path.insert(path_len, "/");
             set_frame_headers(resp);
             add_header(resp, 8, "301");                               // "301 Moved Permanently"
             add_header(resp, 54, conf->ServerSoftware.c_str());       // "server"
             add_header(resp, 33, get_time().c_str());                 // "date"
-            add_header(resp, 46, resp->path.append("/").c_str());     // "location"
+            add_header(resp, 46, resp->path.c_str());                 // "location"
             add_header(resp, 31, "text/plain");                       // "content-type"
             resp->create_headers = true;
 
@@ -653,8 +648,6 @@ int EventHandlerClass::recv_frame(Connect *c)
     ret = parse_frame(c);
     if (ret < 0)
     {
-        if (ret == ERR_TRY_AGAIN)
-            return 0;
         ssl_shutdown(c);
         return -1;
     }

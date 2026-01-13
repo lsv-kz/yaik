@@ -18,7 +18,21 @@ int set_response(Connect *c)
 
     if ((c->numReq >= (unsigned int)conf->MaxRequestsPerClient) || (conf->TimeoutKeepAlive == 0))
         c->h1->connKeepAlive = false;
-    decode(c->h1->resp.path.c_str(), c->h1->resp.path.size(), c->h1->resp.decode_path);
+    int path_len = 0;
+    c->h1->resp.decode_query_string = "";
+    const char *p = strchr(c->h1->resp.path.c_str(), '?');
+    if (p)
+    {
+        c->h1->resp.query_string = p + 1;
+        path_len = p - c->h1->resp.path.c_str();
+    }
+    else
+    {
+        c->h1->resp.query_string = "";
+        path_len = c->h1->resp.path.size();
+    }
+
+    decode(c->h1->resp.path.c_str(), path_len, c->h1->resp.decode_path);
 
     int len = c->h1->resp.decode_path.size();
     if (len >= c->h1->resp.clean_decode_path_size)
@@ -40,29 +54,12 @@ int set_response(Connect *c)
         c->h1->resp.clean_decode_path_size = len + 1;
     }
 
-    const char *p = strchr(c->h1->resp.path.c_str(), '?');
-    if (p)
-        c->h1->resp.query_string = p + 1;
-    else
-        c->h1->resp.query_string = "";
-
     memcpy(c->h1->resp.clean_decode_path, c->h1->resp.decode_path.c_str(), len);
     c->h1->resp.clean_decode_path[len] = 0;
-    p = (const char*)memchr(c->h1->resp.clean_decode_path, '?', len);
-    if (p)
+    
+    if (c->h1->resp.query_string.size())
     {
-        c->h1->resp.decode_query_string = p + 1;
-        len = p - c->h1->resp.clean_decode_path;
-        c->h1->resp.clean_decode_path[len] = 0;
-    }
-    else
-    {
-        c->h1->resp.decode_query_string = NULL;
-        if (c->h1->resp.query_string.size() > 0)
-        {
-            print_err(c, "<%s:%d> Error ?\n", __func__, __LINE__);
-            return -RS500;
-        }
+        decode(c->h1->resp.query_string.c_str(), c->h1->resp.query_string.size(), c->h1->resp.decode_query_string);
     }
 
     int err = clean_path(c->h1->resp.clean_decode_path, len);
@@ -76,7 +73,6 @@ int set_response(Connect *c)
     {
         c->h1->resp.cgi_type = CGI;
         c->h1->resp.cgi_status = CGI_CREATE;
-        c->h1->resp.cgi.scriptName = c->h1->resp.clean_decode_path;
         c->h1->resp.source_data = DYN_PAGE;
         return 0;
     }
@@ -90,7 +86,6 @@ int set_response(Connect *c)
         else
             return -RS404;
         c->h1->resp.cgi_status = CGI_CREATE;
-        c->h1->resp.cgi.scriptName = c->h1->resp.clean_decode_path;
         c->h1->resp.source_data = DYN_PAGE;
         return 0;
     }
@@ -129,6 +124,16 @@ int set_response(Connect *c)
 
     if (S_ISDIR(st.st_mode))
     {
+        if (c->h1->resp.clean_decode_path[strlen(c->h1->resp.clean_decode_path) - 1] != '/')
+        {
+            c->h1->resp.resp_status = RS301;
+            c->h1->resp.path.insert(path_len, "/");
+            c->h1->hdrs = "Location: ";
+            c->h1->hdrs += c->h1->resp.path.c_str();
+            c->h1->hdrs += "\r\n";
+            return send_message(c, "301 Moved Permanently");
+        }
+
         int ret = index_dir(c, path, c->h1->resp.clean_decode_path, &c->h1->resp.send_data);
         if (ret < 0)
         {
@@ -472,7 +477,6 @@ void EventHandlerClass::http1_end_request(Connect *c)
             }
         }
 
-        c->h1->resp.cgi.scriptName.clear();
         c->h1->resp.cgi.start = false;
         --all_cgi;
     }
@@ -876,11 +880,10 @@ int send_message(Connect *c, const char *msg)
     }
 
     c->h1->chunk_mode = NO_CHUNK;
-    if (create_response_headers(c) < 0)
-        return -1;
-
     c->h1->con_status = http1::SEND_RESP_HEADERS;
     c->h1->resp.source_data = FROM_DATA_BUFFER;
+    if (create_response_headers(c) < 0)
+        return -1;
     c->client_timer = 0;
     return 0;
 }

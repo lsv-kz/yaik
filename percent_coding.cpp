@@ -96,6 +96,7 @@ int decode(const char *s_in, int len_in, string& s_out)
     char tmp[3];
     unsigned char c;
     long cnt = 0, i;
+    s_out = "";
 
     while (len_in > 0)
     {

@@ -6,7 +6,6 @@ static int flog = STDOUT_FILENO, flog_err = STDERR_FILENO;
 static mutex mtxLog;
 static unsigned int num_log_records = 0, num_logerr_records = 0;
 
-void Exit(int n);
 static time_t create_time;
 //======================================================================
 void create_logfile(const string& log_dir)
@@ -79,7 +78,7 @@ mtxLog.lock();
         {
             time_t t = time(NULL);
             if ((t - create_time) <  300)
-                Exit(1);
+                exit(1);
             else
                 create_time = time(NULL);
             close(flog_err);
@@ -115,7 +114,7 @@ mtxLog.lock();
         {
             time_t t = time(NULL);
             if ((t - create_time) <  300)
-                Exit(1);
+                exit(1);
             else
                 create_time = time(NULL);
             close(flog_err);
@@ -152,7 +151,7 @@ mtxLog.lock();
         {
             time_t t = time(NULL);
             if ((t - create_time) <  300)
-                Exit(1);
+                exit(1);
             else
                 create_time = time(NULL);
             close(flog_err);
@@ -173,7 +172,7 @@ void print_log(Connect *c, Stream *resp)
 
     ss  << resp->numConn << "/" << resp->numReq << " - " << c->remoteAddr << " - [" << log_time()
         << "] - \"" << get_str_method(resp->httpMethod) << " " << resp->clean_decode_path;
-    if (resp->decode_query_string)
+    if (resp->decode_query_string.size())
         ss << "?" << resp->decode_query_string;
     ss << " HTTP/2\" " << resp->resp_status << " " << resp->send_bytes
         << " \"" << resp->referer << "\" \"" << resp->user_agent << "\" - id=" << resp->id << " \n";
@@ -201,7 +200,7 @@ void print_log(Connect *c)
 
     ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << " - [" << log_time()
         << "] \"" << get_str_method(c->h1->resp.httpMethod) << " " << c->h1->resp.clean_decode_path;
-    if (c->h1->resp.decode_query_string)
+    if (c->h1->resp.decode_query_string.size())
         ss << "?" << c->h1->resp.decode_query_string;
     ss << " HTTP/1.1\" " << c->h1->resp.resp_status << " " << c->h1->resp.send_bytes
         << " \"" << c->h1->resp.referer << "\" \"" << c->h1->resp.user_agent << "\"\n";

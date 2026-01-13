@@ -639,7 +639,8 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
         p += 2;
         char buf[32];
         buf[0] = 0;
-        for (int i = 0; *p; )
+        int i = 0;
+        for ( ; *p; )
         {
             char ch = *p;
             if (isdigit(ch))
@@ -648,11 +649,9 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
                 ++p;
             }
             else
-            {
-                buf[i] = 0;
                 break;
-            }
         }
+        buf[i] = 0;
 
         if (*p != 0)
             return 0;
@@ -666,7 +665,8 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
         ++p;
         char buf[32];
         buf[0] = 0;
-        for (int i = 0; *p; )
+        int i = 0;
+        for ( ; *p; )
         {
             char ch = *p;
             if (isdigit(ch))
@@ -675,21 +675,19 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
                 ++p;
             }
             else
-            {
-                buf[i] = 0;
                 break;
-            }
         }
+        buf[i] = 0;
 
         if (*p != '-')
             return 0;
         sscanf(buf, "%lld", offset);
         if (*offset >= file_size)
             return -RS416;
-        
         ++p;
         buf[0] = 0;
-        for (int i = 0; *p; )
+        i = 0;
+        for ( ; *p; )
         {
             char ch = *p;
             if (isdigit(ch))
@@ -698,11 +696,9 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
                 ++p;
             }
             else
-            {
-                buf[i] = 0;
                 break;
-            }
         }
+        buf[i] = 0;
 
         if (*p != 0)
             return 0;

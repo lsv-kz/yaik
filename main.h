@@ -56,7 +56,8 @@ const char proto_alpn[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '
 
 const int hpack_mask = 0x40;
 
-enum { // response status
+enum
+{
     RS101 = 101,
     RS200 = 200, RS204 = 204, RS206 = 206,
     RS301 = 301, RS302,

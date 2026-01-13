@@ -174,7 +174,7 @@ int scgi_create_params(Connect *c, Stream *resp)
     }
 
     param.name = "SCRIPT_NAME";
-    param.val = resp->cgi.scriptName;
+    param.val = resp->clean_decode_path;
     resp->cgi.vPar.push_back(param);
     ++i;
 

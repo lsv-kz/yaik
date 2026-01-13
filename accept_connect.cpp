@@ -5,20 +5,16 @@ using namespace std;
 static mutex mtx_num_conn;
 static condition_variable cond_num_conn;
 
-static mutex mtx_list;
-static condition_variable cond_list;
-
 static Connect *list_start;
 static Connect *list_end;
+static struct pollfd *poll_fd;
 
-static int num_conn, thr_exit = 0;
+static int num_conn;
 //======================================================================
 static void close_connect(Connect *c);
-static void thread_ssl_accept();
 //======================================================================
 static void push_list(Connect *c)
 {
-mtx_list.lock();
     c->next = NULL;
     c->prev = list_end;
     if (list_end)
@@ -26,13 +22,10 @@ mtx_list.lock();
     list_end = c;
     if (!list_start)
         list_start = c;
-mtx_list.unlock();
-    cond_list.notify_one();
 }
 //======================================================================
 static void delete_from_list(Connect *c)
 {
-mtx_list.lock();
     if (!c->next && !c->prev)
     {
         list_start = list_end = NULL;
@@ -52,10 +45,9 @@ mtx_list.lock();
         list_start = c->next;
         c->next->prev = NULL;
     }
-mtx_list.unlock();
 }
 //======================================================================
-static void start_conn()
+void start_conn()
 {
 mtx_num_conn.lock();
     ++num_conn;
@@ -70,13 +62,18 @@ mtx_num_conn.unlock();
     cond_num_conn.notify_one();
 }
 //======================================================================
-static void is_maxconn()
+bool is_maxconn()
 {
 unique_lock<mutex> lk(mtx_num_conn);
-    while (num_conn >= conf->MaxAcceptConnections)
+    while ((num_conn >= conf->MaxAcceptConnections) && (list_start == NULL))
     {
         cond_num_conn.wait(lk);
     }
+
+    if (num_conn < conf->MaxAcceptConnections)
+        return false;
+    else
+        return true;
 }
 //======================================================================
 void accept_connect(int serverSocket)
@@ -84,6 +81,13 @@ void accept_connect(int serverSocket)
     unsigned long allConn = 0;
     num_conn = 0;
     list_start = list_end = NULL;
+
+    poll_fd = new(nothrow) struct pollfd [conf->MaxAcceptConnections];
+    if (!poll_fd)
+    {
+        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     if (chdir(conf->DocumentRoot.c_str()))
     {
@@ -93,17 +97,6 @@ void accept_connect(int serverSocket)
     //------------------------------------------------------------------
     printf(" +++++ pid=%u, uid=%u, gid=%u +++++\n",
                                 getpid(), getuid(), getgid());
-    //------------------------------------------------------------------
-    thread thr_accept;
-    try
-    {
-        thr_accept = thread(thread_ssl_accept);
-    }
-    catch (...)
-    {
-        print_err("<%s:%d> Error create thread(thread_ssl_accept): errno=%d\n", __func__, __LINE__, errno);
-        exit(errno);
-    }
     //------------------------------------------------------------------
     thread work_thr;
     try
@@ -117,7 +110,7 @@ void accept_connect(int serverSocket)
     }
     //------------------------------------------------------------------
     int run = 1;
-    struct pollfd poll_fd[2];
+    int num_wait = 0;
     poll_fd[0].fd = serverSocket;
     poll_fd[0].events = POLLIN;
 
@@ -126,9 +119,24 @@ void accept_connect(int serverSocket)
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
 
-        is_maxconn();
+        if (is_maxconn())
+            poll_fd[0].events = 0;
+        else
+            poll_fd[0].events = POLLIN;
 
-        int ret_poll = poll(poll_fd, 1, -1);
+        Connect *c = list_start, *next = NULL;
+        for ( num_wait = 1; c; ++num_wait, c = next )
+        {
+            next = c->next;
+            poll_fd[num_wait].fd = c->clientSocket;
+            poll_fd[num_wait].events = c->tls.poll_events;
+//print_err("<%s:%d> num_wait=%d, 0x%02X\n", __func__, __LINE__, num_wait, poll_fd[num_wait].events);
+        }
+
+        int timeout = -1;
+        if (num_wait > 1)
+            timeout = conf->TimeoutPoll;
+        int ret_poll = poll(poll_fd, num_wait, timeout);
         if (ret_poll < 0)
         {
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
@@ -254,78 +262,19 @@ void accept_connect(int serverSocket)
                 }
             }
         }
-        else// if (poll_fd[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+        else if (poll_fd[0].revents)
         {
-            print_err("<%s:%d> Error revents=0x%02X\n", __func__, __LINE__, poll_fd[0].revents);
+            print_err("<%s:%d> Error revents=0x%02X, num_wait=%d, timeout=%d\n", __func__, __LINE__, 
+                    poll_fd[0].revents, num_wait, timeout);
             break;
         }
-    }
 
-    thr_exit = 1;
-    cond_list.notify_one();
-    thr_accept.join();
-    close_work_thread();
-    work_thr.join();
-    print_err("<%s:%d> all_conn=%lu, open_conn=%d\n", __func__, __LINE__, allConn, num_conn);
-    usleep(100000);
-}
-//======================================================================
-void thread_ssl_accept()
-{
-    static struct pollfd *poll_fd;
-    poll_fd = new(nothrow) struct pollfd [conf->MaxAcceptConnections];
-    if (!poll_fd)
-    {
-        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    for ( ; ; )
-    {
-        {
-    unique_lock<mutex> lk(mtx_list);
-            while (!list_start)
-            {
-                cond_list.wait(lk);
-                if (thr_exit)
-                    break;
-            }
-
-            if (thr_exit)
-                break;
-        }
-
-        Connect *c = list_start, *next = NULL;
-        int num_poll = 0;
-        for ( ; c; c = next)
-        {
-            next = c->next;
-            time_t t = time(NULL);
-            if ((t - c->client_timer) >= conf->Timeout)
-            {
-                print_err(c, "<%s:%d> Timeout=%ld\n", __func__, __LINE__, t - c->client_timer);
-                close_connect(c);
-            }
-            else
-            {
-                poll_fd[num_poll].fd = c->clientSocket;
-                poll_fd[num_poll].events = c->tls.poll_events;
-                ++num_poll;
-            }
-        }
-
-        int ret_poll = poll(poll_fd, num_poll, conf->TimeoutPoll);
-        if (ret_poll < 0)
-        {
-            print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
-            break;
-        }
-        else if (ret_poll == 0)
+        if (num_wait <= 1)
             continue;
 
         c = list_start;
         next = NULL;
-        for ( int i = 0; c && (i < num_poll); ++i, c = next )
+        for ( int i = 1; i < num_wait; ++i, c = next )
         {
             next = c->next;
             int revents = poll_fd[i].revents;
@@ -389,7 +338,12 @@ void thread_ssl_accept()
         }
     }
 
-    delete [] poll_fd;
+    print_err("<%s:%d> all_conn=%lu, open_conn=%d\n", __func__, __LINE__, allConn, num_conn);
+    close_work_thread();
+    work_thr.join();
+    if (poll_fd)
+        delete [] poll_fd;
+    usleep(100000);
 }
 //======================================================================
 void close_connect(Connect *c)
@@ -405,11 +359,4 @@ void close_connect(Connect *c)
     close(c->clientSocket);
     delete c;
     decrement_num_conn();
-}
-//======================================================================
-void Exit(int n)
-{
-    thr_exit = 1;
-    cond_list.notify_one();
-    exit(n);
 }

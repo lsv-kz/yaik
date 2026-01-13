@@ -25,31 +25,70 @@ struct Param
 
 enum HTTP2_ERRORS
 {
-    NO_ERROR, PROTOCOL_ERROR, INTERNAL_ERROR, FLOW_CONTROL_ERROR, SETTINGS_TIMEOUT, STREAM_CLOSED, FRAME_SIZE_ERROR, 
-    REFUSED_STREAM, CANCEL, COMPRESSION_ERROR, CONNECT_ERROR, ENHANCE_YOUR_CALM, INADEQUATE_SECURITY, HTTP_1_1_REQUIRED, 
+    NO_ERROR,
+    PROTOCOL_ERROR,
+    INTERNAL_ERROR,
+    FLOW_CONTROL_ERROR,
+    SETTINGS_TIMEOUT,
+    STREAM_CLOSED,
+    FRAME_SIZE_ERROR,
+    REFUSED_STREAM,
+    CANCEL,
+    COMPRESSION_ERROR,
+    CONNECT_ERROR,
+    ENHANCE_YOUR_CALM,
+    INADEQUATE_SECURITY,
+    HTTP_1_1_REQUIRED,
 };
 
 enum FRAME_TYPE
 {
-    DATA, HEADERS, PRIORITY, RST_STREAM, SETTINGS, PUSH_PROMISE, PING,
-    GOAWAY, WINDOW_UPDATE, CONTINUATION, ALTSVC, ORIGIN = 0x0C, PRIORITY_UPDATE = 0x10,
+    DATA,
+    HEADERS,
+    PRIORITY,
+    RST_STREAM,
+    SETTINGS,
+    PUSH_PROMISE,
+    PING,
+    GOAWAY,
+    WINDOW_UPDATE,
+    CONTINUATION,
+    ALTSVC,
+    ORIGIN = 0x0C,
+    PRIORITY_UPDATE = 0x10,
 };
 
-enum HTTP2_FLAGS { FLAG_ACK = 0x1, FLAG_END_STREAM = 0x1, FLAG_END_HEADERS = 0x4, FLAG_PADDED = 0x8, FLAG_PRIORITY = 0x20 };
+enum HTTP2_FLAGS
+{
+    FLAG_ACK = 0x1,
+    FLAG_END_STREAM = 0x1,
+    FLAG_END_HEADERS = 0x4,
+    FLAG_PADDED = 0x8,
+    FLAG_PRIORITY = 0x20
+};
 
 enum SOURCE_DATA
 {
-    NO_SOURCE, 
-    DIRECTORY, 
-    FROM_FILE, 
-    MULTIPART_DATA, 
-    FROM_DATA_BUFFER, 
-    DYN_PAGE, 
+    NO_SOURCE,
+    DIRECTORY,
+    FROM_FILE,
+    MULTIPART_DATA,
+    FROM_DATA_BUFFER,
+    DYN_PAGE,
 };
 
 enum CGI_TYPE { CGI, PHPCGI, PHPFPM, FASTCGI, SCGI, };
 
-enum CGI_STATUS { NO_CGI,  CGI_CREATE, FASTCGI_BEGIN, FASTCGI_PARAMS, SCGI_PARAMS, CGI_STDIN, CGI_STDOUT, };
+enum CGI_STATUS
+{
+    NO_CGI,
+    CGI_CREATE,
+    FASTCGI_BEGIN,
+    FASTCGI_PARAMS,
+    SCGI_PARAMS,
+    CGI_STDIN,
+    CGI_STDOUT,
+};
 
 extern const char *static_tab[][2];
 
@@ -146,7 +185,7 @@ public:
         }
     }
 };
-
+//======================================================================
 extern const Config* const conf;
 //======================================================================
 struct Stream
@@ -168,7 +207,7 @@ struct Stream
     std::string decode_path;
 
     std::string query_string;
-    const char *decode_query_string;
+    std::string decode_query_string;
 
     char *clean_decode_path;
     int clean_decode_path_size;
@@ -213,8 +252,6 @@ struct Stream
         bool end;
 
         time_t timer;
-
-        std::string scriptName;
 
         pid_t pid;
         std::string path;
@@ -294,7 +331,7 @@ struct Stream
         ++numReq;
         path.clear();
         decode_path.clear();
-        decode_query_string = NULL;
+        decode_query_string.clear();
         host.clear();
         user_agent.clear();
         referer.clear();
