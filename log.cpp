@@ -78,7 +78,11 @@ mtxLog.lock();
         {
             time_t t = time(NULL);
             if ((t - create_time) <  300)
+            {
+                close(flog_err);
+                flog_err = STDERR_FILENO;
                 exit(1);
+            }
             else
                 create_time = time(NULL);
             close(flog_err);
@@ -110,11 +114,15 @@ mtxLog.lock();
     {
         write(flog_err, ss.c_str(), ss.size());
         num_logerr_records++;
-        if (num_logerr_records > 50000)
+        if (num_logerr_records > 500000)
         {
             time_t t = time(NULL);
             if ((t - create_time) <  300)
+            {
+                close(flog_err);
+                flog_err = STDERR_FILENO;
                 exit(1);
+            }
             else
                 create_time = time(NULL);
             close(flog_err);
@@ -151,7 +159,11 @@ mtxLog.lock();
         {
             time_t t = time(NULL);
             if ((t - create_time) <  300)
+            {
+                close(flog_err);
+                flog_err = STDERR_FILENO;
                 exit(1);
+            }
             else
                 create_time = time(NULL);
             close(flog_err);

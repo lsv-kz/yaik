@@ -7,6 +7,7 @@ static condition_variable cond_num_conn;
 
 static Connect *list_start;
 static Connect *list_end;
+
 static struct pollfd *poll_fd;
 
 static int num_conn;
@@ -130,7 +131,6 @@ void accept_connect(int serverSocket)
             next = c->next;
             poll_fd[num_wait].fd = c->clientSocket;
             poll_fd[num_wait].events = c->tls.poll_events;
-//print_err("<%s:%d> num_wait=%d, 0x%02X\n", __func__, __LINE__, num_wait, poll_fd[num_wait].events);
         }
 
         int timeout = -1;

@@ -478,7 +478,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
         }
 
         c->h1->resp.cgi.start = false;
-        --all_cgi;
+        --cgi_num_work;
     }
     else
     {

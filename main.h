@@ -93,7 +93,7 @@ struct FrameRedySend
 {
     FrameRedySend *prev;
     FrameRedySend *next;
-    
+
     int id;
     ByteArray frame;
 };
@@ -318,7 +318,7 @@ class EventHandlerClass
     std::mutex mtx_thr, mtx_cgi;
     std::condition_variable cond_thr;
 
-    int num_poll, all_cgi;
+    int num_poll, cgi_num_work;
     int close_thr;
     unsigned long num_request;
 

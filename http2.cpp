@@ -503,7 +503,7 @@ int set_response(Connect *c, Stream *resp)
             return 0;
         }
 
-        int err = index_dir(c, path, resp->decode_path.c_str(), &resp->buf);
+        int err = index_dir(c, path, resp->clean_decode_path, &resp->buf);
         if (err)
         {
             print_err(resp, "<%s:%d> Error index_dir(): %d\n", __func__, __LINE__, err);
