@@ -182,8 +182,8 @@ void print_log(Connect *c, Stream *resp)
     if (!c || !resp)
         return;
 
-    ss  << resp->numConn << "/" << resp->numReq << " - " << c->remoteAddr << " - [" << log_time()
-        << "] - \"" << get_str_method(resp->httpMethod) << " " << resp->clean_decode_path;
+    ss  << resp->numConn << "/" << resp->numReq << " - " << c->remoteAddr << ":" << c->serv->port << " - [" << log_time()
+        << "] \"" << get_str_method(resp->httpMethod) << " " << resp->clean_decode_path;
     if (resp->decode_query_string.size())
         ss << "?" << resp->decode_query_string;
     ss << " HTTP/2\" " << resp->resp_status << " " << resp->send_bytes
@@ -210,12 +210,36 @@ void print_log(Connect *c)
 
     String ss(320);
 
-    ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << " - [" << log_time()
+    ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << ":" << c->serv->port << " - [" << log_time()
         << "] \"" << get_str_method(c->h1->resp.httpMethod) << " " << c->h1->resp.clean_decode_path;
     if (c->h1->resp.decode_query_string.size())
         ss << "?" << c->h1->resp.decode_query_string;
     ss << " HTTP/1.1\" " << c->h1->resp.resp_status << " " << c->h1->resp.send_bytes
         << " \"" << c->h1->resp.referer << "\" \"" << c->h1->resp.user_agent << "\"\n";
+
+mtxLog.lock();
+    write(flog, ss.c_str(), ss.size());
+    num_log_records++;
+    if (num_log_records > 500000)
+    {
+        close(flog);
+        create_logfile(conf->LogPath);
+        num_log_records = 0;
+    }
+mtxLog.unlock();
+}
+//======================================================================
+void print_log_err(Connect *c, const char *method, const char *status)
+{
+    if (c == NULL)
+        return;
+    if (c->Protocol == P_HTTP2)
+        return;
+
+    String ss(320);
+
+    ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << ":" << c->serv->port << " - [" << log_time()
+        << "] \"" << method << " ...\" " << status << "\n";
 
 mtxLog.lock();
     write(flog, ss.c_str(), ss.size());

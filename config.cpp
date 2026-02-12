@@ -49,44 +49,50 @@ void create_conf_file(const char *path)
 
     fprintf(f, "PrintDebugMsg        off       # on, off\n\n");
 
-    fprintf(f, "SecureConnect        on\n");
-    fprintf(f, "SelectHTTP2          on\n");
+    fprintf(f, "ServerSoftware       ?\n\n");
 
-    fprintf(f, "ServerSoftware       ?\n");
-    fprintf(f, "ServerAddr           0.0.0.0\n");
-    fprintf(f, "ServerPort           ?\n\n");
-
-    fprintf(f, "Certificate          ?\n");
-    fprintf(f, "CertificateKey       ?\n");
-    fprintf(f, "DocumentRoot         ?\n");
-    fprintf(f, "ScriptPath           ?\n");
     fprintf(f, "LogPath              ?\n");
     fprintf(f, "PidFilePath          ?\n\n");
+    
+    fprintf(f, "server {\n");
+    fprintf(f, "    ip   0.0.0.0\n");
+    fprintf(f, "    ServerPort  8443\n");
+    fprintf(f, "    SecureConnect  on\n");
+    fprintf(f, "    SelectHTTP2    on\n");
+    fprintf(f, "    vhost {\n");
+    fprintf(f, "        HostName         ?\n");
+    fprintf(f, "        DocumentRoot     ?\n");
+    fprintf(f, "        CertificatePath  ?\n");
+    fprintf(f, "        Certificate      ?\n");
+    fprintf(f, "        CertificateKey   ?\n");
+    fprintf(f, "    }\n");
+    fprintf(f, "}\n");
 
-    fprintf(f, "####### UsePHP: off, php-fpm, php-cgi #######\n");
-    fprintf(f, "UsePHP     php-fpm\n");
-    fprintf(f, "PathPHP    127.0.0.1:9000  # [php-fpm: 127.0.0.1:9000 (/var/run/php-fpm.sock)]\n\n");
+    fprintf(f, "server {\n");
+    fprintf(f, "    ip   0.0.0.0\n");
+    fprintf(f, "    ServerPort  8080\n");
+    fprintf(f, "    vhost {\n");
+    fprintf(f, "        HostName         ?\n");
+    fprintf(f, "        DocumentRoot     ?\n");
+    fprintf(f, "    }\n");
+    fprintf(f, "}\n");
 
     fprintf(f, "ListenBacklog        4096\n");
     fprintf(f, "TcpNoDelay           on\n\n");
 
     fprintf(f, "HeaderTableSize       0\n");
-    fprintf(f, "MaxConcurrentStreams  128\n\n");
+    fprintf(f, "MaxConcurrentStreams  10\n\n");
 
-    fprintf(f, "MaxAcceptConnections  5000\n\n");
+    fprintf(f, "MaxAcceptConnections  10000\n\n");
     
     fprintf(f, "MaxRequestsPerClient  1000\n\n");
 
-    fprintf(f, "HTTP1_DataBufSize          16384\n");
+    fprintf(f, "HTTP1_DataBufSize          262144\n");
     fprintf(f, "HTTP2_DataBufSize          16384\n\n");
 
     fprintf(f, "Timeout              35  # seconds\n");
-    fprintf(f, "TimeoutKeepAlive     180 # seconds\n");
+    fprintf(f, "TimeoutKeepAlive     120 # seconds\n");
     fprintf(f, "TimeoutPoll          10  # milliseconds\n\n");
-    fprintf(f, "TimeoutCGI           15  # seconds\n");
-    fprintf(f, "MaxCgiProc           15\n\n");
-
-    fprintf(f, "ClientMaxBodySize    10000000\n\n");
 
     fprintf(f, "ShowMediaFiles       off\n\n");
 
@@ -256,8 +262,9 @@ void create_fcgi_list(fcgi_list_addr **l, const string &s1, const string &s2, CG
 int read_conf_file(FILE *fconf)
 {
     String ss;
-    c.SecureConnect = true;
-    c.ctx = NULL;
+    init_openssl();
+    bool default_server = true;
+    Server *prev_server = NULL;
 
     int n;
     while ((n = getLine(fconf, ss)) > 0)
@@ -281,36 +288,6 @@ int read_conf_file(FILE *fconf)
                     return -1;
                 }
             }
-            else if (s1 == "SecureConnect")
-            {
-                if (!strcmp_case(s2.c_str(), "on"))
-                    c.SecureConnect = true;
-                else if (!strcmp_case(s2.c_str(), "off"))
-                    c.SecureConnect = false;
-                else
-                {
-                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
-                            __func__, __LINE__, line_, ss.c_str());
-                    return -1;
-                }
-            }
-            else if (s1 == "SelectHTTP2")
-            {
-                if (!strcmp_case(s2.c_str(), "on"))
-                    c.SelectHTTP2 = true;
-                else if (!strcmp_case(s2.c_str(), "off"))
-                    c.SelectHTTP2 = false;
-                else
-                {
-                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
-                            __func__, __LINE__, line_, ss.c_str());
-                    return -1;
-                }
-            }
-            else if (s1 == "ServerAddr")
-                s2 >> c.ServerAddr;
-            else if (s1 == "ServerPort")
-                s2 >> c.ServerPort;
             else if (s1 == "ServerSoftware")
                 s2 >> c.ServerSoftware;
             else if ((s1 == "HeaderTableSize") && is_number(s2.c_str()))
@@ -354,10 +331,6 @@ int read_conf_file(FILE *fconf)
                 s2 >> c.MaxRequestsPerClient;
             else if ((s1 == "TimeoutPoll") && is_number(s2.c_str()))
                 s2 >> c.TimeoutPoll;
-            else if (s1 == "Certificate")
-                s2 >> c.Certificate;
-            else if (s1 == "CertificateKey")
-                s2 >> c.CertificateKey;
             else if (s1 == "DocumentRoot")
                 s2 >> c.DocumentRoot;
             else if (s1 == "ScriptPath")
@@ -415,6 +388,156 @@ int read_conf_file(FILE *fconf)
         {
             if (ss == "ServerSoftware")
                 c.ServerSoftware = "";
+            else if (ss == "server")
+            {
+                if (find_bracket(fconf, '{') == 0)
+                {
+                    fprintf(stderr, "<%s:%d> Error not found \"{\", line <%d>\n", __func__, __LINE__, line_);
+                    return -1;
+                }
+
+                Server *serv = c.create_server();
+                if (conf->all_servers == NULL)
+                    c.all_servers = prev_server = serv;
+                else
+                {
+                    prev_server->next = serv;
+                    prev_server = serv;
+                }
+
+                VHost *default_vhost = NULL, *prev_vhost = NULL;
+                while ((n = getLine(fconf, ss)) > 0)
+                {
+                    if (n == 2)
+                    {
+                        String s1, s2;
+                        ss >> s1;
+                        ss >> s2;
+
+                        if (s1 == "ip")
+                            s2 >> serv->ip;
+                        else if ((s1 == "ServerPort") && is_number(s2.c_str()))
+                            s2 >> serv->port;
+                        else if (s1 == "SecureConnect")
+                        {
+                            if (!strcmp_case(s2.c_str(), "on"))
+                                serv->SecureConnect = true;
+                            else if (!strcmp_case(s2.c_str(), "off"))
+                                serv->SecureConnect = false;
+                            else
+                            {
+                                fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                                        __func__, __LINE__, line_, ss.c_str());
+                                return -1;
+                            }
+                        }
+                        else if (s1 == "SelectHTTP2")
+                        {
+                            if (!strcmp_case(s2.c_str(), "on"))
+                                serv->SelectHTTP2 = true;
+                            else if (!strcmp_case(s2.c_str(), "off"))
+                                serv->SelectHTTP2 = false;
+                            else
+                            {
+                                fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                                        __func__, __LINE__, line_, ss.c_str());
+                                return -1;
+                            }
+                        }
+                        else
+                        {
+                            fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                            return -1;
+                        }
+                    }
+                    else if (n == 1)
+                    {
+                        if (ss == "vhost")
+                        {
+                            VHost *vhost;
+                            try
+                            {
+                                vhost = new VHost;
+                            }
+                            catch (...)
+                            {
+                                fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                                exit(errno);
+                            }
+
+                            if (default_vhost == NULL)
+                            {
+                                serv->vhosts = default_vhost = prev_vhost = vhost;
+                            }
+                            else
+                            {
+                                prev_vhost->next = vhost;
+                                prev_vhost = vhost;
+                            }
+
+                            if (find_bracket(fconf, '{') == 0)
+                            {
+                                fprintf(stderr, "<%s:%d> Error not found \"{\", line <%d>\n", __func__, __LINE__, line_);
+                                return -1;
+                            }
+
+                            while (getLine(fconf, ss) == 2)
+                            {
+                                String s1, s2;
+                                ss >> s1;
+                                ss >> s2;
+                                
+                                if (s1 == "HostName")
+                                    s2 >> vhost->hostname;
+                                else if (s1 == "DocumentRoot")
+                                {
+                                    s2 >> vhost->DocumentRoot;
+                                    if (default_server)
+                                    {
+                                        c.DocumentRoot = vhost->DocumentRoot;
+                                        default_server = false;
+                                    }
+                                }
+                                else if (s1 == "CertificatePath")
+                                    s2 >> vhost->CertificatePath;
+                                else if (s1 == "Certificate")
+                                    s2 >> vhost->Certificate;
+                                else if (s1 == "CertificateKey")
+                                    s2 >> vhost->CertificateKey;
+                                else
+                                {
+                                    fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                                    return -1;
+                                }
+                            }
+
+                            if (ss != "}")
+                            {
+                                fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
+                                return -1;
+                            }
+                        }
+                        else if (ss == "}")
+                            break;
+                        else
+                        {
+                            fprintf(stderr, "<%s:%d> Error not found \"}\", [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                            return -1;
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                        return -1;
+                    }
+                }
+
+                /*if (ss != "}")
+                {
+                    fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
+                    return -1;
+                }*/
+            }
             else if (ss == "fastcgi")
             {
                 if (find_bracket(fconf, '{') == 0)
@@ -484,31 +607,19 @@ int read_conf_file(FILE *fconf)
     //------------------------------------------------------------------
     if (check_path(c.LogPath) == -1)
     {
-        fprintf(stderr, "!!! Error LogPath [%s]\n", conf->LogPath.c_str());
-        return -1;
-    }
-    //------------------------------------------------------------------
-    if (check_path(c.DocumentRoot) == -1)
-    {
-        fprintf(stderr, "!!! Error DocumentRoot [%s]\n", conf->DocumentRoot.c_str());
+        fprintf(stderr, "<%s:%d> !!! Error LogPath [%s]\n", __func__, __LINE__, conf->LogPath.c_str());
         return -1;
     }
     //------------------------------------------------------------------
     if (check_path(c.ScriptPath) == -1)
     {
         c.ScriptPath = "";
-        fprintf(stderr, "!!! Error ScriptPath [%s]\n", conf->ScriptPath.c_str());
+        fprintf(stderr, "<%s:%d> !!! Error ScriptPath [%s]\n", __func__, __LINE__, conf->ScriptPath.c_str());
     }
     //------------------------------------------------------------------
     if (check_path(c.PidFilePath) == -1)
     {
-        fprintf(stderr, "!!! Error PidFilePath [%s]\n", conf->PidFilePath.c_str());
-        return -1;
-    }
-    //------------------------------------------------------------------
-    if (!conf->SecureConnect && conf->SelectHTTP2)
-    {
-        fprintf(stderr, "!!! conf->SecureConnect=off and SelectHTTP2=on is incompatible\n");
+        fprintf(stderr, "<%s:%d> !!! Error PidFilePath [%s]\n", __func__, __LINE__, conf->PidFilePath.c_str());
         return -1;
     }
     //------------------------------------------------------------------
@@ -521,6 +632,12 @@ int read_conf_file(FILE *fconf)
     if (conf->MaxAcceptConnections <= 0)
     {
         fprintf(stderr, "<%s:%d> Error: MaxAcceptConnections=%d\n", __func__, __LINE__, conf->MaxAcceptConnections);
+        return -1;
+    }
+
+    if (conf->MaxAcceptConnections <= conf->num_servers)
+    {
+        fprintf(stderr, "<%s:%d> Error: MaxAcceptConnections < num_servers\n", __func__, __LINE__);
         return -1;
     }
 
@@ -542,12 +659,76 @@ int read_conf_file(FILE *fconf)
         return -1;
     }
     //------------------------------------------------------------------
-    if (conf->SecureConnect)
+    if (check_path(c.DocumentRoot) == -1)
     {
-        if (!(c.ctx = Init_SSL()))
+        fprintf(stderr, "<%s:%d> !!! Error DocumentRoot [%s]\n", __func__, __LINE__, conf->DocumentRoot.c_str());
+        return -1;
+    }
+
+    if (conf->all_servers)
+    {
+        Server *serv = conf->all_servers;
+        for ( ; serv; serv = serv->next)
         {
-            fprintf(stderr, "<%s:%d> Error Init_SSL()\n", __func__, __LINE__);
-            return -1;
+            serv->sock = create_server_socket(serv->ip.c_str(), serv->port.c_str());
+            if (serv->sock == -1)
+            {
+                return -1;
+            }
+
+            VHost *h = serv->vhosts;
+            for ( ; h; h = h->next)
+            {
+                if (check_path(h->DocumentRoot) == -1)
+                {
+                    fprintf(stderr, "<%s:%d> !!! Error DocumentRoot [%s], [%s]\n", __func__, __LINE__, 
+                                    h->DocumentRoot.c_str(), h->hostname.c_str());
+                    return -1;
+                }
+
+                if (serv->SecureConnect)
+                {
+                    if (check_path(h->CertificatePath) == -1)
+                    {
+                        fprintf(stderr, "<%s:%d> !!! Error CertificatePath [%s]\n", __func__, __LINE__, h->CertificatePath.c_str());
+                        return -1;
+                    }
+                    else
+                    {
+                        h->Certificate = h->CertificatePath + '/' + h->Certificate;
+                        h->CertificateKey = h->CertificatePath + '/' + h->CertificateKey;
+                    }
+
+                    if (serv->ctx == NULL)
+                    {
+                        if (serv->SelectHTTP2 == true)
+                            serv->alpn = 2;
+                        else
+                            serv->alpn = 1;
+                        serv->ctx = create_context(serv->vhosts);
+                        if (serv->ctx == NULL)
+                            return -1;
+                        h->ctx = serv->ctx;
+                        SSL_CTX_set_alpn_select_cb(serv->ctx, alpn_select_proto_cb, &serv->alpn);
+                        SSL_CTX_set_tlsext_servername_callback(serv->ctx, sni_callback);
+                        SSL_CTX_set_tlsext_servername_arg(serv->ctx, serv->vhosts);
+                        
+                        SSL *ssl = SSL_new(h->ctx);
+                        if (ssl)
+                        {
+                            cout << "SSL version: " << SSL_get_version(ssl) << "\n";
+                            SSL_free(ssl);
+                        }
+                    }
+                    else
+                    {
+                        h->ctx = create_context(h);
+                        if (h->ctx == NULL)
+                            return -1;
+                        SSL_CTX_set_alpn_select_cb(h->ctx, alpn_select_proto_cb, &serv->alpn);
+                    }
+                }
+            }
         }
     }
 

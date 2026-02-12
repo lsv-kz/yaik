@@ -16,26 +16,23 @@ void cleanup_openssl()
     EVP_cleanup();
 }
 //======================================================================
-SSL_CTX *create_context()
-{
-    const SSL_METHOD *method;
-    method = TLS_server_method();
-    //method = TLSv1_2_server_method();
-    return SSL_CTX_new(method);
-}
-//======================================================================
-static int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
+int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                                 const unsigned char *in, unsigned int inlen, void *arg)
 {
     if (conf->PrintDebugMsg)
-        hex_print_stderr(__func__, __LINE__, in, inlen);
-    const char *p = proto_alpn;
-    unsigned int proto_alpn_len = sizeof(proto_alpn); 
-    if (conf->SelectHTTP2)
+        hex_print_stderr("client", __LINE__, in, inlen);
+    const char *p = proto_alpn_h1;
+    unsigned int proto_alpn_len = sizeof(proto_alpn_h1);
+    int i_alpn = *(int *)arg;
+    if (i_alpn == 2)
     {
         p = proto_alpn_h2;
-        proto_alpn_len = sizeof(proto_alpn_h2); 
+        proto_alpn_len = sizeof(proto_alpn_h2);
     }
+
+    if (conf->PrintDebugMsg)
+        hex_print_stderr("server", __LINE__, p, proto_alpn_len);
+
     for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(p[i] + 1))
     {
         for (unsigned int j = 0; j < inlen; j += (unsigned int)(in[j] + 1))
@@ -54,43 +51,61 @@ static int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned ch
     return SSL_TLSEXT_ERR_NOACK;
 }
 //======================================================================
-int configure_context(SSL_CTX *ctx)
+int sni_callback(SSL *ssl, int *al, void *arg)
 {
-    if (SSL_CTX_use_certificate_file(ctx, conf->Certificate.c_str(), SSL_FILETYPE_PEM) != 1)
+    const char *servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+    if ((arg) && servername)
     {
-        fprintf(stderr, "<%s:%d> SSL_CTX_use_certificate_file failed: %s\n", __func__, __LINE__, conf->Certificate.c_str());
-        return -1;
-    }
-
-    if (SSL_CTX_use_PrivateKey_file(ctx, conf->CertificateKey.c_str(), SSL_FILETYPE_PEM) != 1)
-    {
-        fprintf(stderr, "<%s:%d> SSL_CTX_use_PrivateKey_file failed: %s\n", __func__, __LINE__, conf->CertificateKey.c_str());
-        return -1;
-    }
-
-    SSL_CTX_set_alpn_select_cb(ctx, alpn_select_proto_cb, NULL);
-    return 0;
-}
-//======================================================================
-SSL_CTX *Init_SSL(void)
-{
-    SSL_CTX *ctx;
-    init_openssl();
-    ctx = create_context();
-    if (!ctx)
-    {
-        fprintf(stderr, "Unable to create SSL context\n");
-        ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
-    }
-
-    if (configure_context(ctx))
-    {
-        fprintf(stderr, "Error configure_context()\n");
-        exit(EXIT_FAILURE);
+        if (conf->PrintDebugMsg)
+            fprintf(stderr, "<%s:%d> servername: [%s]\n", __func__, __LINE__, servername);
+        VHost *h = (VHost*)arg;
+        for ( ; h; h = h->next)
+        {
+            if (strcmp(h->hostname.c_str(), servername) == 0)
+            {
+                if (conf->PrintDebugMsg)
+                    fprintf(stderr, "<%s:%d> [%s]\n", __func__, __LINE__, h->hostname.c_str());
+                if (h->ctx != NULL)
+                {
+                    SSL_set_SSL_CTX(ssl, h->ctx);
+                    return SSL_TLSEXT_ERR_OK;
+                }
+            }
+        }
     }
     else
-        return ctx;
+        fprintf(stderr, "<%s:%d> arg=%p\n", __func__, __LINE__, arg);
+    return SSL_TLSEXT_ERR_OK;
+}
+//======================================================================
+SSL_CTX *create_context(VHost *vhost)
+{
+    const SSL_METHOD *method;
+    method = TLS_server_method();
+    //method = TLSv1_2_server_method();
+    SSL_CTX *ctx = SSL_CTX_new(method);
+    if (ctx == NULL)
+    {
+        ERR_print_errors_fp(stderr);
+        fprintf(stderr, "<%s:%d> Error SSL_CTX_new()\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    if (SSL_CTX_use_certificate_file(ctx, vhost->Certificate.c_str(), SSL_FILETYPE_PEM) != 1)
+    {
+        fprintf(stderr, "<%s:%d> SSL_CTX_use_certificate_file failed: %s\n", __func__, __LINE__, vhost->Certificate.c_str());
+        SSL_CTX_free(ctx);
+        return NULL;
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, vhost->CertificateKey.c_str(), SSL_FILETYPE_PEM) != 1)
+    {
+        fprintf(stderr, "<%s:%d> SSL_CTX_use_PrivateKey_file failed: %s\n", __func__, __LINE__, vhost->CertificateKey.c_str());
+        SSL_CTX_free(ctx);
+        return NULL;
+    }
+
+    return ctx;
 }
 //======================================================================
 const char *ssl_strerror(int err)
@@ -246,6 +261,10 @@ int ssl_accept(Connect *c)
         }
         else
         {
+            if (!conf->PrintDebugMsg)
+            {
+                print_err(c, "<%s:%d> Error SSL_accept()=%d: %s\n", __func__, __LINE__, ret, ssl_strerror(c->tls.err));
+            }
             return -1;
         }
     }
@@ -256,12 +275,12 @@ int ssl_accept(Connect *c)
         SSL_get0_alpn_selected(c->tls.ssl, &data, &datalen);
         if (data)
         {
-            unsigned int proto_alpn_len = sizeof(proto_alpn);
-            for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(proto_alpn[i] + 1))
+            unsigned int proto_alpn_len = sizeof(proto_alpn_h1);
+            for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(proto_alpn_h1[i] + 1))
             {
-                if (datalen != (unsigned int)proto_alpn[i])
+                if (datalen != (unsigned int)proto_alpn_h1[i])
                     continue;
-                if (memcmp(data, &proto_alpn[i + 1], datalen) == 0)
+                if (memcmp(data, &proto_alpn_h1[i + 1], datalen) == 0)
                 {
                     if (memcmp(data, "h2", datalen) == 0)
                     {
@@ -276,6 +295,7 @@ int ssl_accept(Connect *c)
                         print_err(c, "<%s:%d> Protocol: ?\n", __func__, __LINE__);
                         return -1;
                     }
+
                     c->client_timer = 0;
                     return 1;
                 }

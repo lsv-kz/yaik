@@ -52,7 +52,7 @@ const int  ERR_TRY_AGAIN = -1000;
 const int  MAX_STREAM = 128;
 
 const char proto_alpn_h2[] = { 2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
-const char proto_alpn[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '2' };
+const char proto_alpn_h1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '2' };
 
 const int hpack_mask = 0x40;
 
@@ -66,7 +66,7 @@ enum
     RS500 = 500, RS501, RS502, RS503, RS504, RS505
 };
 
-enum PROTOCOL { P_HTTP1, P_HTTP2};
+enum PROTOCOL { PROTOCOL_SELECT, P_HTTP1, P_HTTP2};
 //----------------------------------------------------------------------
 #define FCGI_KEEP_CONN  1
 #define FCGI_RESPONDER  1
@@ -267,12 +267,14 @@ public:
     {
         numReq = 1;
         err = 0;
+        client_timer = 0;
         fd_revents = 0;
         tls.ssl = NULL;
         tls.err = 0;
         tls.poll_events = 0;
         h1 = NULL;
         h2 = NULL;
+        serv = NULL;
     }
 
     ~Connect()
@@ -286,18 +288,20 @@ public:
     Connect *prev;
     Connect *next;
 
-    static int serverSocket;
-
     unsigned long numConn;
     unsigned long numReq;
 
+    int serverSocket;
     char remoteAddr[NI_MAXHOST];
     char remotePort[NI_MAXSERV];
 
     PROTOCOL Protocol;
+    const Server *serv;
+    bool SecureConnect;
 
     int err;
-    int  clientSocket;
+    std::string ServerPort;
+    int clientSocket;
     time_t client_timer;
     int fd_revents;
 
@@ -408,9 +412,9 @@ public:
 };
 //--------------------- accept_connect.cpp -----------------------------
 void decrement_num_conn();
-void accept_connect(int serverSocket);
+void accept_connect();
 //------------------------ socket.cpp-----------------------------------
-int create_server_socket(const Config *c);
+int create_server_socket(const char *addr, const char *port);
 int create_fcgi_socket(const char *);
 int write_to_client(Connect *c, const char *buf, int len, int id);
 int read_from_client(Connect *c, char *buf, int len);
@@ -501,6 +505,7 @@ void print_err(Connect *c, const char *format, ...);
 void print_err(Stream *r, const char *format, ...);
 void print_log(Connect *c, Stream *r);
 void print_log(Connect *c);
+void print_log_err(Connect *c, const char *method, const char *status);
 //----------------------- huffman_code.cpp -----------------------------
 void huffman_encode(const char *s, ByteArray& out);
 int huffman_decode(const char *s, int len, std::string& s_out);
@@ -511,9 +516,10 @@ void close_work_thread();
 //---------------------------- ssl.cpp ---------------------------------
 void init_openssl();
 void cleanup_openssl();
-SSL_CTX *create_context();
-int configure_context(SSL_CTX *ctx);
-SSL_CTX *Init_SSL();
+int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
+                                const unsigned char *in, unsigned int inlen, void *arg);
+int sni_callback(SSL *ssl, int *al, void *arg);
+SSL_CTX *create_context(VHost *vhost);
 const char *ssl_strerror(int err);
 int ssl_read(Connect *c, char *buf, int len);
 int ssl_peek(Connect *c, char *buf, int len);

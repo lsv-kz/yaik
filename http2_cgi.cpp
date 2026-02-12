@@ -81,7 +81,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
             setenv("SERVER_PROTOCOL", "HTTP/2.0", 1);
         else
             setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
-        setenv("DOCUMENT_ROOT", conf->DocumentRoot.c_str(), 1);
+        setenv("DOCUMENT_ROOT", resp->vhost->DocumentRoot.c_str(), 1);
         setenv("REMOTE_ADDR", c->remoteAddr, 1);
         setenv("REMOTE_PORT", c->remotePort, 1);
         setenv("REQUEST_URI", resp->path.c_str(), 1);

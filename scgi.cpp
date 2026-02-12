@@ -107,7 +107,7 @@ int scgi_create_params(Connect *c, Stream *resp)
     ++i;
 
     param.name = "DOCUMENT_ROOT";
-    param.val = conf->DocumentRoot;
+    param.val = resp->vhost->DocumentRoot;
     resp->cgi.vPar.push_back(param);
     ++i;
 
@@ -145,7 +145,7 @@ int scgi_create_params(Connect *c, Stream *resp)
     ++i;
 
     param.name = "SERVER_PORT";
-    param.val = conf->ServerPort;
+    param.val = c->ServerPort;
     resp->cgi.vPar.push_back(param);
     ++i;
 

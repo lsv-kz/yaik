@@ -230,8 +230,6 @@ int index_dir(Connect *r, string& path, const char *uri, ByteArray *html)
     vector<string> list;
     list.reserve(maxNumFiles);
 
-    path += '/';
-
     dir = opendir(path.c_str());
     if (dir == NULL)
     {

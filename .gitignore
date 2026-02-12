@@ -1,4 +1,4 @@
 objs/*.o
 yaik
 logs/*.log
-cert/*
+certs/*

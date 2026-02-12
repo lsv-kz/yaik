@@ -518,6 +518,23 @@ void EventHandlerClass::set_poll()
         {
             http1_set_poll(c);
         }
+        else if (c->Protocol == PROTOCOL_SELECT)
+        {
+            time_t t = time(NULL);
+            if (c->client_timer == 0)
+                c->client_timer = t;
+            if ((t - c->client_timer) >= conf->Timeout)
+            {
+                print_err(c, "<%s:%d> Timeout=%ld, SSL_ACCEPT\n", __func__, __LINE__, t - c->client_timer);
+                close_connect(c);
+            }
+            else
+            {
+                poll_fd[num_poll].fd = c->clientSocket;
+                poll_fd[num_poll].events = c->tls.poll_events;
+                conn_array[num_poll++] = c;
+            }
+        }
     }
 }
 //======================================================================
@@ -544,7 +561,7 @@ void EventHandlerClass::http1_set_poll(Connect *c)
     }
     else
     {
-        if (conf->SecureConnect)
+        if (c->SecureConnect)
         {
             int ret = 0, pending = 0;
             while ((pending = SSL_pending(c->tls.ssl)))
@@ -797,11 +814,111 @@ int EventHandlerClass::_poll()
             continue;
         if (c->Protocol == P_HTTP1)
         {
-            http1_poll(c, poll_fd[i].revents);
+            http1_worker(c, poll_fd[i].revents);
         }
         else if (c->Protocol == P_HTTP2)
         {
             http2_poll(c, i);
+        }
+        else if (c->Protocol == PROTOCOL_SELECT)//===============================
+        {
+            if ((c->SecureConnect == false) && (poll_fd[i].revents | POLLIN))
+            {
+                char s[16];
+                int ret = recv(c->clientSocket, s, sizeof(s) - 1, MSG_PEEK);
+                if (ret > 0)
+                {
+                    s[ret] = 0;
+                    if (!strncmp(s, "GET", 3) || !strncmp(s, "POST", 4) || !strncmp(s, "HEAD", 4))
+                    {
+                        s[4] = 0;
+                        c->err = -RS400;
+                        char buf[] = "HTTP/1.1 400 Bad Request\r\n"
+                                    "Content-Type: text/plain\r\n"
+                                    "Connection: close\r\n"
+                                    "\r\n"
+                                    "Error: 400 Bad Request";
+                        send(c->clientSocket, buf, strlen(buf), 0);
+                        print_log_err(c, s, "400");
+                        close_connect(c);
+                        return 0;
+                    }
+                    else
+                    {
+                        c->SecureConnect = true;
+                    }
+                }
+                else if (ret < 0)
+                {
+                    //print_err(c, "<%s:%d> 0x%02X read_from_client=%d, %s\n", __func__, __LINE__, poll_fd[i].revents, ret, strerror(errno));
+                    return 0;
+                }
+                else
+                {
+                    //print_err(c, "<%s:%d> 0x%02X read_from_client=%d\n", __func__, __LINE__, poll_fd[i].revents, ret);
+                    close_connect(c);
+                    return 0;
+                }
+            }
+
+            if (poll_fd[i].revents & (POLLIN | POLLOUT))
+            {
+                int ret = ssl_accept(c);
+                if (ret == 1)
+                {
+                    c->tls.poll_events = POLLIN;
+                    c->client_timer = 0;
+                    if (c->Protocol == P_HTTP2)
+                    {
+                        c->h2 = new(nothrow) http2;
+                        if (c->h2)
+                        {
+                            c->h2->con_status = http2::PREFACE_MESSAGE;
+                            c->numReq = 0;
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            ssl_shutdown(c);
+                            //close_connect(c);
+                        }
+                    }
+                    else if (c->Protocol == P_HTTP1)
+                    {
+                        c->h1 = new(nothrow) http1;
+                        if (c->h1)
+                        {
+                            c->h1->con_status = http1::READ_REQUEST;
+                            c->h1->resp.numReq = 1;
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            if (c->SecureConnect)
+                                ssl_shutdown(c);
+                            else
+                                close_connect(c);
+                        }
+                    }
+                    else
+                    {
+                        print_err(c, "<%s:%d> Error Protocol\n", __func__, __LINE__);
+                        close_connect(c);
+                    }
+                }
+                else
+                {
+                    if ((c->tls.err == SSL_ERROR_SYSCALL) || (c->tls.err == SSL_ERROR_SSL))
+                    {
+                        close_connect(c);
+                    }
+                }
+            }
+            else if (poll_fd[i].revents)
+            {
+                print_err(c, "<%s:%d>  Error revents=0x%02X\n", __func__, __LINE__, poll_fd[i].revents);
+                close_connect(c);
+            }
         }
     }
     return 0;
@@ -870,7 +987,7 @@ void EventHandlerClass::close_connect(Connect *c)
     if (conf->PrintDebugMsg)
         print_err(c, "<%s:%d> Close connection\n", __func__, __LINE__);
 
-    if (c->tls.ssl && conf->SecureConnect)
+    if (c->tls.ssl && c->SecureConnect)
     {
         SSL_clear(c->tls.ssl);
         SSL_free(c->tls.ssl);
@@ -983,7 +1100,7 @@ void EventHandlerClass::close_connections()
         for ( ; c; c = next)
         {
             next = c->next;
-            if (c->tls.ssl && conf->SecureConnect)
+            if (c->tls.ssl && c->SecureConnect)
             {
                 if((c->tls.err != SSL_ERROR_SSL) && (c->tls.err != SSL_ERROR_SYSCALL))
                     SSL_shutdown(c->tls.ssl);
@@ -1002,7 +1119,7 @@ void EventHandlerClass::close_connections()
         for ( ; c; c = next)
         {
             next = c->next;
-            if (c->tls.ssl && conf->SecureConnect)
+            if (c->tls.ssl && c->SecureConnect)
             {
                 if((c->tls.err != SSL_ERROR_SSL) && (c->tls.err != SSL_ERROR_SYSCALL))
                     SSL_shutdown(c->tls.ssl);

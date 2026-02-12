@@ -16,6 +16,27 @@ int set_response(Connect *c)
         return -RS501;
     }
 
+    if (c->h1->resp.host.size() == 0)
+    {
+        print_err(c, "<%s:%d> size Host: %d\n", __func__, __LINE__, c->h1->resp.host.size());
+        return -RS400;
+    }
+
+    c->h1->resp.vhost = NULL;
+    VHost *h = c->serv->vhosts;
+    for ( ; h; h = h->next)
+    {
+        if (!strncmp(h->hostname.c_str(), c->h1->resp.host.c_str(), h->hostname.size()))
+        {
+//print_err(c, "<%s:%d> [%s] : [%s]\n", __func__, __LINE__, h->hostname.c_str(), c->h1->resp.host.c_str());
+            c->h1->resp.vhost = h;
+            break;
+        }
+    }
+
+    if (c->h1->resp.vhost == NULL)
+        c->h1->resp.vhost = c->serv->vhosts;
+
     if ((c->numReq >= (unsigned int)conf->MaxRequestsPerClient) || (conf->TimeoutKeepAlive == 0))
         c->h1->connKeepAlive = false;
     int path_len = 0;
@@ -91,8 +112,8 @@ int set_response(Connect *c)
     }
     //------------------------------------------------------------------
     string path;
-    path.reserve(c->h1->resp.clean_decode_path_size + 257);
-    path += '.';
+    path.reserve(c->h1->resp.vhost->DocumentRoot.size() + c->h1->resp.clean_decode_path_size + 257);
+    path = c->h1->resp.vhost->DocumentRoot;
     path += c->h1->resp.clean_decode_path;
     struct stat st;
     int ret;
@@ -162,7 +183,6 @@ int set_response(Connect *c)
         else
             return -RS404;
     }
-    path.reserve(0);
 
     if (c->h1->resp.range.size())
     {
@@ -370,8 +390,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             c->h1->resp.send_data.set_offset(ret);
             if (c->h1->resp.send_data.size_remain())
             {
-                print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__, 
-                            ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
+                //print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__, 
+                //            ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
                 return 0;
             }
 
@@ -517,7 +537,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
             print_log(c);
         }
 
-        if (c->tls.ssl && conf->SecureConnect)
+        if (c->tls.ssl && c->SecureConnect)
         {
             ssl_shutdown(c);
         }

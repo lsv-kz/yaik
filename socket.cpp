@@ -1,7 +1,7 @@
 #include "main.h"
 
 //======================================================================
-int create_server_socket(const Config *conf)
+int create_server_socket(const char *addr, const char *port)
 {
     int sockfd, n;
     const int sock_opt = 1;
@@ -12,9 +12,9 @@ int create_server_socket(const Config *conf)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    if ((n = getaddrinfo(conf->ServerAddr.c_str(), conf->ServerPort.c_str(), &hints, &result)) != 0)
+    if ((n = getaddrinfo(addr, port, &hints, &result)) != 0)
     {
-        fprintf(stderr, "Error getaddrinfo(%s:%s): %s\n", conf->ServerAddr.c_str(), conf->ServerPort.c_str(), gai_strerror(n));
+        fprintf(stderr, "Error getaddrinfo(%s:%s): %s\n", addr, port, gai_strerror(n));
         return -1;
     }
 
@@ -200,13 +200,13 @@ int create_fcgi_socket(const char *script_path)
     return sockfd;
 }
 //======================================================================
-int write_to_client(Connect *con, const char *buf, int len, int id)
+int write_to_client(Connect *c, const char *buf, int len, int id)
 {
-    if (conf->SecureConnect)
-        return ssl_write(con, buf, len, id);
+    if (c->SecureConnect)
+        return ssl_write(c, buf, len, id);
     else
     {
-        int ret = send(con->clientSocket, buf, len, 0);
+        int ret = send(c->clientSocket, buf, len, 0);
         if (ret == -1)
         {
             //fprintf(stderr, "<%s:%d> Error send(): %s\n", __func__, __LINE__, strerror(errno));
@@ -220,13 +220,13 @@ int write_to_client(Connect *con, const char *buf, int len, int id)
     }
 }
 //======================================================================
-int read_from_client(Connect *con, char *buf, int len)
+int read_from_client(Connect *c, char *buf, int len)
 {
-    if (conf->SecureConnect)
-        return ssl_read(con, buf, len);
+    if (c->SecureConnect)
+        return ssl_read(c, buf, len);
     else
     {
-        int ret = recv(con->clientSocket, buf, len, 0);
+        int ret = recv(c->clientSocket, buf, len, 0);
         if (ret == -1)
         {
             if (errno == EAGAIN)
@@ -242,13 +242,13 @@ int read_from_client(Connect *con, char *buf, int len)
     }
 }
 //======================================================================
-int peek(Connect *con, char *buf, int len)
+int peek(Connect *c, char *buf, int len)
 {
-    if (conf->SecureConnect)
-        return ssl_peek(con, buf, len);
+    if (c->SecureConnect)
+        return ssl_peek(c, buf, len);
     else
     {
-        int ret = recv(con->clientSocket, buf, len, MSG_PEEK);
+        int ret = recv(c->clientSocket, buf, len, MSG_PEEK);
         if (ret == -1)
         {
             if (errno == EAGAIN)

@@ -291,6 +291,28 @@ int set_frame_data(Connect *c, Stream *resp)
 //======================================================================
 int set_response(Connect *c, Stream *resp)
 {
+    if (resp->host.size() == 0)
+    {
+        print_err(c, "<%s:%d> size Host: %d\n", __func__, __LINE__, resp->host.size());
+        resp_400(resp);
+        return 0;
+    }
+
+    resp->vhost = NULL;
+    VHost *h = c->serv->vhosts;
+    for ( ; h; h = h->next)
+    {
+        if (!strncmp(h->hostname.c_str(), resp->host.c_str(), h->hostname.size()))
+        {
+//print_err(c, "<%s:%d> [%s] : [%s]\n", __func__, __LINE__, h->hostname.c_str(), resp->host.c_str());
+            resp->vhost = h;
+            break;
+        }
+    }
+
+    if (resp->vhost == NULL)
+        resp->vhost = c->serv->vhosts;
+
     resp->send_bytes = 0;
     int path_len = 0;
     resp->decode_query_string = "";
@@ -307,7 +329,6 @@ int set_response(Connect *c, Stream *resp)
     }
 
     decode(resp->path.c_str(), path_len, resp->decode_path);
-
     int len = resp->decode_path.size();
     if (len >= resp->clean_decode_path_size)
     {
@@ -369,7 +390,10 @@ int set_response(Connect *c, Stream *resp)
         }
     }
     //-------------------------------
-    string path = ".";
+    string path;
+    path.reserve(resp->vhost->DocumentRoot.size() + resp->clean_decode_path_size + 257);
+    path = resp->vhost->DocumentRoot;
+
     if (!strncmp(resp->clean_decode_path, "/cgi-bin/", 9) || !strncmp(resp->clean_decode_path, "/cgi/", 5))
     {
         resp->source_data = DYN_PAGE;
@@ -464,7 +488,7 @@ int set_response(Connect *c, Stream *resp)
         resp->fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
         if (resp->fd == -1)
         {
-            print_err(resp, "<%s:%d> Error open(%s): %s\n", __func__, __LINE__, resp->decode_path.c_str(), strerror(errno));
+            print_err(resp, "<%s:%d> Error open(%s): %s\n", __func__, __LINE__, path.c_str(), strerror(errno));
             if (errno == EACCES)
                 resp_403(resp);
             else if (errno == ENOENT)

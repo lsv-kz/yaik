@@ -90,6 +90,51 @@ enum CGI_STATUS
     CGI_STDOUT,
 };
 
+struct VHost
+{
+    VHost *next;
+
+    std::string hostname;
+    std::string DocumentRoot;
+
+    SSL_CTX* ctx;
+    SSL *ssl;
+
+    std::string CertificatePath;
+    std::string Certificate;
+    std::string CertificateKey;
+
+    VHost()
+    {
+        next = NULL;
+        ctx = NULL;
+        ssl = NULL;
+    }
+};
+
+struct Server
+{
+    Server *next;
+    std::string ip;
+    std::string port;
+    int sock;
+    bool SecureConnect;
+    bool SelectHTTP2;
+    int alpn;
+    SSL_CTX *ctx;
+    
+    VHost *vhosts;
+    
+    Server()
+    {
+        next = NULL;
+        SecureConnect = SelectHTTP2 = false;
+        alpn = 0;
+        ctx = NULL;
+        vhosts = NULL;
+    }
+};
+
 extern const char *static_tab[][2];
 
 void print_err(const char *format, ...);
@@ -109,20 +154,11 @@ class Config
     Config& operator=(const Config&);
 
 public:
+
     bool PrintDebugMsg;
-
-    SSL_CTX *ctx;
-
-    bool SecureConnect;
-    bool SelectHTTP2;
 
     std::string ServerSoftware;
 
-    std::string ServerAddr;
-    std::string ServerPort;
-
-    std::string Certificate;
-    std::string CertificateKey;
     std::string DocumentRoot;
     std::string ScriptPath;
     std::string LogPath;
@@ -161,16 +197,22 @@ public:
     uid_t server_uid;
     gid_t server_gid;
 
+    Server *all_servers;
+    int num_servers;
+
     fcgi_list_addr *fcgi_list;
     //------------------------------------------------------------------
     Config()
     {
         fcgi_list = NULL;
+        num_servers = 0;
+        all_servers = NULL;
     }
 
     ~Config()
     {
         free_fcgi_list();
+        free_servers();
     }
 
     void free_fcgi_list()
@@ -184,6 +226,40 @@ public:
                 delete t;
         }
     }
+
+    void free_servers()
+    {
+        Server *serv = all_servers;
+        for ( ; serv; serv = all_servers)
+        {
+            VHost *h = serv->vhosts;
+            for ( ; h; h = serv->vhosts)
+            {
+                serv->vhosts = h->next;
+                delete h;
+            }
+            
+            all_servers = serv->next;
+            delete serv;
+        }
+    }
+
+    Server *create_server()
+    {
+        Server *serv;
+        try
+        {
+            serv = new Server;
+        }
+        catch (...)
+        {
+            fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+            exit(errno);
+        }
+        
+        num_servers++;
+        return serv;
+    }
 };
 //======================================================================
 extern const Config* const conf;
@@ -195,6 +271,8 @@ struct Stream
 
     unsigned long numConn;
     unsigned long numReq;
+
+    VHost *vhost;
 
     int id;
     FRAME_TYPE type;
@@ -275,6 +353,7 @@ struct Stream
     Stream()
     {
         numConn = numReq = 0;
+        vhost = NULL;
         init();
         id = 0;
         Time = time(NULL);
