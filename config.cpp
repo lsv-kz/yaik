@@ -701,15 +701,11 @@ int read_conf_file(FILE *fconf)
 
                     if (serv->ctx == NULL)
                     {
-                        if (serv->SelectHTTP2 == true)
-                            serv->alpn = 2;
-                        else
-                            serv->alpn = 1;
                         serv->ctx = create_context(serv->vhosts);
                         if (serv->ctx == NULL)
                             return -1;
                         h->ctx = serv->ctx;
-                        SSL_CTX_set_alpn_select_cb(serv->ctx, alpn_select_proto_cb, &serv->alpn);
+                        SSL_CTX_set_alpn_select_cb(serv->ctx, alpn_select_proto_cb, &serv->SelectHTTP2);
                         SSL_CTX_set_tlsext_servername_callback(serv->ctx, sni_callback);
                         SSL_CTX_set_tlsext_servername_arg(serv->ctx, serv->vhosts);
                         
@@ -725,7 +721,7 @@ int read_conf_file(FILE *fconf)
                         h->ctx = create_context(h);
                         if (h->ctx == NULL)
                             return -1;
-                        SSL_CTX_set_alpn_select_cb(h->ctx, alpn_select_proto_cb, &serv->alpn);
+                        SSL_CTX_set_alpn_select_cb(h->ctx, alpn_select_proto_cb, &serv->SelectHTTP2);
                     }
                 }
             }

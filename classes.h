@@ -120,7 +120,6 @@ struct Server
     int sock;
     bool SecureConnect;
     bool SelectHTTP2;
-    int alpn;
     SSL_CTX *ctx;
     
     VHost *vhosts;
@@ -129,7 +128,6 @@ struct Server
     {
         next = NULL;
         SecureConnect = SelectHTTP2 = false;
-        alpn = 0;
         ctx = NULL;
         vhosts = NULL;
     }

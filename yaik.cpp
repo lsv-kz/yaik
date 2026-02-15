@@ -79,8 +79,11 @@ int main(int argc, char *argv[])
             cout << "   ==========================\n";
             cout << "   {port : " << serv->port << "}\n";
             cout << "   {sock : " << serv->sock << "}\n";
-            cout << "   [SecureConnect : " << serv->SecureConnect << "]\n";
-            cout << "   [SelectHTTP2 : " << serv->SelectHTTP2 << "]\n";
+            if (serv->SecureConnect)
+            {
+                cout << "   [SecureConnect : " << serv->SecureConnect << "]\n";
+                cout << "   [SelectHTTP2 : " << serv->SelectHTTP2 << "]\n";
+            }
             cout << "\n";
             VHost *h = serv->vhosts;
             for ( ; h; h = h->next)

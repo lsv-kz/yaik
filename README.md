@@ -31,10 +31,9 @@ Tested on OS: Debian, OpenBSD, FreeBSD
  * Install libraries: OpenSSL or LibreSSL.  
  * cd yaik/  
  * mkdir objs/  
- * mkdir cert/  
+ * mkdir certs/  
  * make clean  
  * make  
 
  * Edit configuration file: yaik.conf  
- * Create TLS certificate (cert.pem), private key (key.pem) and place them in folder cert/  
  * ./yaik  

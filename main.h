@@ -51,8 +51,8 @@ const int  MAX_URI = 2048;
 const int  ERR_TRY_AGAIN = -1000;
 const int  MAX_STREAM = 128;
 
-const char proto_alpn_h2[] = { 2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
-const char proto_alpn_h1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '2' };
+const char proto_alpn_1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '2' };
+const char proto_alpn_2[] = { 2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
 
 const int hpack_mask = 0x40;
 

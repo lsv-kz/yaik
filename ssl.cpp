@@ -19,15 +19,20 @@ void cleanup_openssl()
 int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                                 const unsigned char *in, unsigned int inlen, void *arg)
 {
+    if (arg == NULL)
+    {
+        print_err("<%s:%d> Error (arg = NULL)\n", __func__, __LINE__);
+        return SSL_TLSEXT_ERR_NOACK;
+    }
     if (conf->PrintDebugMsg)
         hex_print_stderr("client", __LINE__, in, inlen);
-    const char *p = proto_alpn_h1;
-    unsigned int proto_alpn_len = sizeof(proto_alpn_h1);
-    int i_alpn = *(int *)arg;
-    if (i_alpn == 2)
+    const char *p = proto_alpn_1;
+    unsigned int proto_alpn_len = sizeof(proto_alpn_1);
+    bool i_alpn = *(bool *)arg;
+    if (i_alpn)
     {
-        p = proto_alpn_h2;
-        proto_alpn_len = sizeof(proto_alpn_h2);
+        p = proto_alpn_2;
+        proto_alpn_len = sizeof(proto_alpn_2);
     }
 
     if (conf->PrintDebugMsg)
@@ -35,11 +40,11 @@ int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *out
 
     for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(p[i] + 1))
     {
-        for (unsigned int j = 0; j < inlen; j += (unsigned int)(in[j] + 1))
+        for ( unsigned int j = 0; j < inlen; j += (unsigned int)(in[j] + 1))
         {
             if (in[j] != p[i])
                 continue;
-            if (memcmp(&in[j], &p[i], in[j] + 1) == 0)
+            if (memcmp(&in[j + 1], &p[i + 1], in[j]) == 0)
             {
                 *out = (unsigned char *)&in[j + 1];
                 *outlen = in[j];
@@ -275,21 +280,24 @@ int ssl_accept(Connect *c)
         SSL_get0_alpn_selected(c->tls.ssl, &data, &datalen);
         if (data)
         {
-            unsigned int proto_alpn_len = sizeof(proto_alpn_h1);
-            for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(proto_alpn_h1[i] + 1))
+            const char *p = proto_alpn_1;
+            unsigned int proto_alpn_len = sizeof(proto_alpn_1);
+            if (c->serv->SelectHTTP2)
             {
-                if (datalen != (unsigned int)proto_alpn_h1[i])
+                p = proto_alpn_2;
+                proto_alpn_len = sizeof(proto_alpn_2);
+            }
+
+            for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(p[i] + 1))
+            {
+                if (datalen != (unsigned int)p[i])
                     continue;
-                if (memcmp(data, &proto_alpn_h1[i + 1], datalen) == 0)
+                if (memcmp(data, &p[i + 1], datalen) == 0)
                 {
                     if (memcmp(data, "h2", datalen) == 0)
-                    {
                         c->Protocol = P_HTTP2;
-                    }
                     else if (memcmp(data, "http/1.1", datalen) == 0)
-                    {
                         c->Protocol = P_HTTP1;
-                    }
                     else
                     {
                         print_err(c, "<%s:%d> Protocol: ?\n", __func__, __LINE__);

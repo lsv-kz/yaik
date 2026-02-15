@@ -978,7 +978,6 @@ int EventHandlerClass::parse_frame(Connect *c)
     {
         if (conf->PrintDebugMsg)
             hex_print_stderr("recv PING", __LINE__, c->h2->body.ptr(), c->h2->body.size());
-        c->client_timer = 0;
         print_err("[%u] recv PING\n", c->numConn);
         c->h2->ping.cpy("\x0\x0\x8\x6\x1\x0\x0\x0\x0", 9);
         c->h2->ping.cat(c->h2->body.ptr(), c->h2->body.size());
