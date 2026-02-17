@@ -3,7 +3,6 @@
 using namespace std;
 //======================================================================
 static int read_request_headers(Connect *c);
-static int send_message(Connect *c, const char *msg);
 static const char *http1_status_response(int st);
 //======================================================================
 int set_response(Connect *c)

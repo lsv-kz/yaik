@@ -831,16 +831,29 @@ int EventHandlerClass::_poll()
                     s[ret] = 0;
                     if (!strncmp(s, "GET", 3) || !strncmp(s, "POST", 4) || !strncmp(s, "HEAD", 4))
                     {
-                        s[4] = 0;
-                        c->err = -RS400;
-                        char buf[] = "HTTP/1.1 400 Bad Request\r\n"
-                                    "Content-Type: text/plain\r\n"
-                                    "Connection: close\r\n"
-                                    "\r\n"
-                                    "Error: 400 Bad Request";
-                        send(c->clientSocket, buf, strlen(buf), 0);
-                        print_log_err(c, s, "400");
-                        close_connect(c);
+                        c->Protocol = P_HTTP1;
+                        c->SecureConnect = false;
+                        if (c->tls.ssl)
+                        {
+                            SSL_clear(c->tls.ssl);
+                            SSL_free(c->tls.ssl);
+                            c->tls.ssl = NULL;
+                        }
+
+                        c->h1 = new(nothrow) http1;
+                        if (c->h1)
+                        {
+                            c->h1->resp.numReq = 1;
+                            c->h1->resp.resp_status = RS400;
+                            c->h1->connKeepAlive = false;
+                            send_message(c, "");
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            close_connect(c);
+                        }
+
                         return 0;
                     }
                     else

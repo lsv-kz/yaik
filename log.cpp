@@ -229,30 +229,6 @@ mtxLog.lock();
 mtxLog.unlock();
 }
 //======================================================================
-void print_log_err(Connect *c, const char *method, const char *status)
-{
-    if (c == NULL)
-        return;
-    if (c->Protocol == P_HTTP2)
-        return;
-
-    String ss(320);
-
-    ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << ":" << c->serv->port << " - [" << log_time()
-        << "] \"" << method << " ...\" " << status << "\n";
-
-mtxLog.lock();
-    write(flog, ss.c_str(), ss.size());
-    num_log_records++;
-    if (num_log_records > 500000)
-    {
-        close(flog);
-        create_logfile(conf->LogPath);
-        num_log_records = 0;
-    }
-mtxLog.unlock();
-}
-//======================================================================
 void create_logfiles(const string& log_dir)
 {
     create_logfile(log_dir);

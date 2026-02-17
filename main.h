@@ -424,6 +424,7 @@ int write_to_fcgi(int fd, const char *buf, int len);
 int get_size_sock_buf(int domain, int optname, int type, int protocol);
 //-------------------------- http1.cpp ---------------------------------
 int create_response_headers(Connect *c);
+int send_message(Connect *c, const char *msg);
 int read_post_data(Connect *c);
 //------------------------ http1_cgi.cpp -------------------------------
 int cgi_set_size_chunk(ByteArray *ba);
@@ -505,7 +506,6 @@ void print_err(Connect *c, const char *format, ...);
 void print_err(Stream *r, const char *format, ...);
 void print_log(Connect *c, Stream *r);
 void print_log(Connect *c);
-void print_log_err(Connect *c, const char *method, const char *status);
 //----------------------- huffman_code.cpp -----------------------------
 void huffman_encode(const char *s, ByteArray& out);
 int huffman_decode(const char *s, int len, std::string& s_out);
