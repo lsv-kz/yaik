@@ -98,9 +98,7 @@ struct VHost
     std::string DocumentRoot;
 
     SSL_CTX* ctx;
-    SSL *ssl;
 
-    std::string CertificatePath;
     std::string Certificate;
     std::string CertificateKey;
 
@@ -108,7 +106,6 @@ struct VHost
     {
         next = NULL;
         ctx = NULL;
-        ssl = NULL;
     }
 };
 

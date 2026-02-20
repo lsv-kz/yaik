@@ -62,7 +62,6 @@ void create_conf_file(const char *path)
     fprintf(f, "    vhost {\n");
     fprintf(f, "        HostName         ?\n");
     fprintf(f, "        DocumentRoot     ?\n");
-    fprintf(f, "        CertificatePath  ?\n");
     fprintf(f, "        Certificate      ?\n");
     fprintf(f, "        CertificateKey   ?\n");
     fprintf(f, "    }\n");
@@ -498,8 +497,6 @@ int read_conf_file(FILE *fconf)
                                         default_server = false;
                                     }
                                 }
-                                else if (s1 == "CertificatePath")
-                                    s2 >> vhost->CertificatePath;
                                 else if (s1 == "Certificate")
                                     s2 >> vhost->Certificate;
                                 else if (s1 == "CertificateKey")
@@ -688,15 +685,17 @@ int read_conf_file(FILE *fconf)
 
                 if (serv->SecureConnect)
                 {
-                    if (check_path(h->CertificatePath) == -1)
+                    struct stat st;
+                    if (lstat(h->Certificate.c_str(), &st) < 0)
                     {
-                        fprintf(stderr, "<%s:%d> !!! Error CertificatePath [%s]\n", __func__, __LINE__, h->CertificatePath.c_str());
+                        fprintf(stderr, "<%s:%d> !!! Error Certificate file [%s] not found\n", __func__, __LINE__, h->Certificate.c_str());
                         return -1;
                     }
-                    else
+
+                    if (lstat(h->CertificateKey.c_str(), &st) < 0)
                     {
-                        h->Certificate = h->CertificatePath + '/' + h->Certificate;
-                        h->CertificateKey = h->CertificatePath + '/' + h->CertificateKey;
+                        fprintf(stderr, "<%s:%d> !!! Error CertificateKey file [%s] not found\n", __func__, __LINE__, h->CertificateKey.c_str());
+                        return -1;
                     }
 
                     if (serv->ctx == NULL)

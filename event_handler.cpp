@@ -824,15 +824,14 @@ int EventHandlerClass::_poll()
         {
             if ((c->SecureConnect == false) && (poll_fd[i].revents | POLLIN))
             {
-                char s[16];
-                int ret = recv(c->clientSocket, s, sizeof(s) - 1, MSG_PEEK);
+                char buf[16];
+                int ret = recv(c->clientSocket, buf, sizeof(buf) - 1, MSG_PEEK);
                 if (ret > 0)
                 {
-                    s[ret] = 0;
-                    if (!strncmp(s, "GET", 3) || !strncmp(s, "POST", 4) || !strncmp(s, "HEAD", 4))
+                    buf[ret] = 0;
+                    if (!strncmp(buf, "GET", 3) || !strncmp(buf, "POST", 4) || !strncmp(buf, "HEAD", 4))
                     {
                         c->Protocol = P_HTTP1;
-                        c->SecureConnect = false;
                         if (c->tls.ssl)
                         {
                             SSL_clear(c->tls.ssl);
@@ -846,7 +845,7 @@ int EventHandlerClass::_poll()
                             c->h1->resp.numReq = 1;
                             c->h1->resp.resp_status = RS400;
                             c->h1->connKeepAlive = false;
-                            send_message(c, "");
+                            send_message(c, "The plain HTTP request was sent to HTTPS port");
                         }
                         else
                         {

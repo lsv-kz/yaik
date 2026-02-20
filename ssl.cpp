@@ -1,6 +1,9 @@
 #include "main.h"
 
 using namespace std;
+
+const char proto_alpn_1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '2' };
+const char proto_alpn_2[] = { 2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
 //======================================================================
 void init_openssl()
 {
@@ -9,11 +12,6 @@ void init_openssl()
     //OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
     ERR_load_crypto_strings();
-}
-//======================================================================
-void cleanup_openssl()
-{
-    EVP_cleanup();
 }
 //======================================================================
 int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
@@ -87,7 +85,6 @@ SSL_CTX *create_context(VHost *vhost)
 {
     const SSL_METHOD *method;
     method = TLS_server_method();
-    //method = TLSv1_2_server_method();
     SSL_CTX *ctx = SSL_CTX_new(method);
     if (ctx == NULL)
     {

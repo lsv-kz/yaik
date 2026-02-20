@@ -50,12 +50,12 @@ void accept_connect()
         print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+/*
     if (chdir(conf->DocumentRoot.c_str()))
     {
         print_err("<%s:%d> Error chdir(%s): %s\n", __func__, __LINE__, conf->DocumentRoot.c_str(), strerror(errno));
         exit(EXIT_FAILURE);
-    }
+    }*/
     //------------------------------------------------------------------
     printf(" +++++ pid=%u, uid=%u, gid=%u +++++\n",
                                 getpid(), getuid(), getgid());
@@ -111,8 +111,8 @@ void accept_connect()
         {
             if (poll_fd[num_].fd != serv->sock)
             {
-                print_err("<%s:%d> Error %d != %d\n", __func__, __LINE__, 
-                                poll_fd[num_].fd, serv->sock);
+                print_err("<%s:%d> Error server %d, socket (%d != %d)\n", __func__, __LINE__, 
+                                num_, poll_fd[num_].fd, serv->sock);
                 run = false;
                 break;
             }

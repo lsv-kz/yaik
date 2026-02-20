@@ -92,7 +92,6 @@ int main(int argc, char *argv[])
                 cout << "   [DocumentRoot : " << h->DocumentRoot << "]\n";
                 if (serv->SecureConnect)
                 {
-                    cout << "   [CertificatePath : " << h->CertificatePath << "]\n";
                     cout << "   [Certificate : " << h->Certificate << "]\n";
                     cout << "   [CertificateKey : " << h->CertificateKey << "]\n";
                 }
@@ -145,11 +144,19 @@ int main(int argc, char *argv[])
                 close(serv->sock);
                 serv->sock = -1;
             }
-/*
+
             if (serv->SecureConnect)
             {
-                
-            }*/
+                VHost *h = serv->vhosts;
+                for ( ; h; h = h->next)
+                {
+                    if (h->ctx)
+                    {
+                        SSL_CTX_free(h->ctx);
+                        h->ctx = NULL;
+                    }
+                }
+            }
         }
     }
 
