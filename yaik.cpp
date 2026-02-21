@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
             if (serv->SecureConnect)
             {
                 cout << "   [SecureConnect : " << serv->SecureConnect << "]\n";
-                cout << "   [SelectHTTP2 : " << serv->SelectHTTP2 << "]\n";
+                cout << "   [EnableHTTP2 : " << serv->EnableHTTP2 << "]\n";
             }
             cout << "\n";
             VHost *h = serv->vhosts;

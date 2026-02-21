@@ -116,7 +116,7 @@ struct Server
     std::string port;
     int sock;
     bool SecureConnect;
-    bool SelectHTTP2;
+    bool EnableHTTP2;
     SSL_CTX *ctx;
     
     VHost *vhosts;
@@ -124,7 +124,7 @@ struct Server
     Server()
     {
         next = NULL;
-        SecureConnect = SelectHTTP2 = false;
+        SecureConnect = EnableHTTP2 = false;
         ctx = NULL;
         vhosts = NULL;
     }

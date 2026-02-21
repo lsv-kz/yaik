@@ -58,7 +58,7 @@ void create_conf_file(const char *path)
     fprintf(f, "    ip   0.0.0.0\n");
     fprintf(f, "    ServerPort  8443\n");
     fprintf(f, "    SecureConnect  on\n");
-    fprintf(f, "    SelectHTTP2    on\n");
+    fprintf(f, "    EnableHTTP2    on\n");
     fprintf(f, "    vhost {\n");
     fprintf(f, "        HostName         ?\n");
     fprintf(f, "        DocumentRoot     ?\n");
@@ -430,12 +430,12 @@ int read_conf_file(FILE *fconf)
                                 return -1;
                             }
                         }
-                        else if (s1 == "SelectHTTP2")
+                        else if (s1 == "EnableHTTP2")
                         {
                             if (!strcmp_case(s2.c_str(), "on"))
-                                serv->SelectHTTP2 = true;
+                                serv->EnableHTTP2 = true;
                             else if (!strcmp_case(s2.c_str(), "off"))
-                                serv->SelectHTTP2 = false;
+                                serv->EnableHTTP2 = false;
                             else
                             {
                                 fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
@@ -704,7 +704,8 @@ int read_conf_file(FILE *fconf)
                         if (serv->ctx == NULL)
                             return -1;
                         h->ctx = serv->ctx;
-                        SSL_CTX_set_alpn_select_cb(serv->ctx, alpn_select_proto_cb, &serv->SelectHTTP2);
+                        if (serv->EnableHTTP2)
+                            SSL_CTX_set_alpn_select_cb(serv->ctx, alpn_select_proto_cb, NULL);
                         SSL_CTX_set_tlsext_servername_callback(serv->ctx, sni_callback);
                         SSL_CTX_set_tlsext_servername_arg(serv->ctx, serv->vhosts);
                         
@@ -720,7 +721,8 @@ int read_conf_file(FILE *fconf)
                         h->ctx = create_context(h);
                         if (h->ctx == NULL)
                             return -1;
-                        SSL_CTX_set_alpn_select_cb(h->ctx, alpn_select_proto_cb, &serv->SelectHTTP2);
+                        if (serv->EnableHTTP2)
+                            SSL_CTX_set_alpn_select_cb(h->ctx, alpn_select_proto_cb, NULL);
                     }
                 }
             }

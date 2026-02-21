@@ -2,8 +2,7 @@
 
 using namespace std;
 
-const char proto_alpn_1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1', 2, 'h', '2' };
-const char proto_alpn_2[] = { 2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
+const char proto_alpn[] = { 2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
 //======================================================================
 void init_openssl()
 {
@@ -17,32 +16,20 @@ void init_openssl()
 int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                                 const unsigned char *in, unsigned int inlen, void *arg)
 {
-    if (arg == NULL)
-    {
-        print_err("<%s:%d> Error (arg = NULL)\n", __func__, __LINE__);
-        return SSL_TLSEXT_ERR_NOACK;
-    }
     if (conf->PrintDebugMsg)
         hex_print_stderr("client", __LINE__, in, inlen);
-    const char *p = proto_alpn_1;
-    unsigned int proto_alpn_len = sizeof(proto_alpn_1);
-    bool i_alpn = *(bool *)arg;
-    if (i_alpn)
-    {
-        p = proto_alpn_2;
-        proto_alpn_len = sizeof(proto_alpn_2);
-    }
+    unsigned int proto_alpn_len = sizeof(proto_alpn);
 
     if (conf->PrintDebugMsg)
-        hex_print_stderr("server", __LINE__, p, proto_alpn_len);
+        hex_print_stderr("server", __LINE__, proto_alpn, proto_alpn_len);
 
-    for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(p[i] + 1))
+    for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(proto_alpn[i] + 1))
     {
         for ( unsigned int j = 0; j < inlen; j += (unsigned int)(in[j] + 1))
         {
-            if (in[j] != p[i])
+            if (in[j] != proto_alpn[i])
                 continue;
-            if (memcmp(&in[j + 1], &p[i + 1], in[j]) == 0)
+            if (memcmp(&in[j + 1], &proto_alpn[i + 1], in[j]) == 0)
             {
                 *out = (unsigned char *)&in[j + 1];
                 *outlen = in[j];
@@ -272,24 +259,24 @@ int ssl_accept(Connect *c)
     }
     else
     {
+        if (c->serv->EnableHTTP2 == false)
+        {
+            c->Protocol = P_HTTP1;
+            return 1;
+        }
+
         const unsigned char *data = NULL;
         unsigned int datalen = 0;
         SSL_get0_alpn_selected(c->tls.ssl, &data, &datalen);
         if (data)
         {
-            const char *p = proto_alpn_1;
-            unsigned int proto_alpn_len = sizeof(proto_alpn_1);
-            if (c->serv->SelectHTTP2)
-            {
-                p = proto_alpn_2;
-                proto_alpn_len = sizeof(proto_alpn_2);
-            }
+            unsigned int proto_alpn_len = sizeof(proto_alpn);
 
-            for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(p[i] + 1))
+            for ( unsigned int i = 0; i < proto_alpn_len; i += (unsigned int)(proto_alpn[i] + 1))
             {
-                if (datalen != (unsigned int)p[i])
+                if (datalen != (unsigned int)proto_alpn[i])
                     continue;
-                if (memcmp(data, &p[i + 1], datalen) == 0)
+                if (memcmp(data, &proto_alpn[i + 1], datalen) == 0)
                 {
                     if (memcmp(data, "h2", datalen) == 0)
                         c->Protocol = P_HTTP2;
@@ -305,8 +292,6 @@ int ssl_accept(Connect *c)
                     return 1;
                 }
             }
-
-            //hex_print_stderr(__func__, __LINE__, data, datalen);
         }
 
         c->Protocol = P_HTTP1;
