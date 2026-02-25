@@ -587,7 +587,7 @@ int int_to_bytes(int data, int pref_len, ByteArray& buf)
 int int_to_bytes(ByteArray& buf, int data, int pref_len, int mask)
 {
     int ret = 0;
-    
+
     if (data < (pow_(2, pref_len) - 1))
     {
         buf.cat((data | mask));

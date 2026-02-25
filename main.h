@@ -220,11 +220,6 @@ struct http1
         try_again = false;
     }
     //------------------------------------------------------------------
-    ~http1()
-    {
-        
-    }
-    //------------------------------------------------------------------
     void init()
     {
         resp.init();
@@ -250,7 +245,7 @@ struct http1
             case SSL_SHUTDOWN:
                 return "SSL_SHUTDOWN";
         }
-    
+
         return "?";
     }
 };

@@ -111,7 +111,7 @@ void accept_connect()
         {
             if (poll_fd[num_].fd != serv->sock)
             {
-                print_err("<%s:%d> Error server %d, socket (%d != %d)\n", __func__, __LINE__, 
+                print_err("<%s:%d> Error server %d, socket (%d != %d)\n", __func__, __LINE__,
                                 num_, poll_fd[num_].fd, serv->sock);
                 run = false;
                 break;
@@ -147,7 +147,7 @@ void accept_connect()
             }
             else if (poll_fd[num_].revents)
             {
-                print_err("<%s:%d> Error revents=0x%02X, num_=%d\n", __func__, __LINE__, 
+                print_err("<%s:%d> Error revents=0x%02X, num_=%d\n", __func__, __LINE__,
                                                 poll_fd[num_].revents, num_);
                 run = false;
                 break;

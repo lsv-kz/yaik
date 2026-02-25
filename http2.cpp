@@ -183,7 +183,7 @@ int set_frame_data(Connect *c, Stream *resp)
     long min_window_size = (c->h2->connect_window_size > resp->stream_window_size) ? resp->stream_window_size : c->h2->connect_window_size;
     if (min_window_size <= 0)
     {
-        print_err(resp, "<%s:%d> !!! connect_window_size=%ld, stream_window_size=%ld, id=%d \n", __func__, __LINE__, 
+        print_err(resp, "<%s:%d> !!! connect_window_size=%ld, stream_window_size=%ld, id=%d \n", __func__, __LINE__,
                     c->h2->connect_window_size, resp->stream_window_size, resp->id);
         return 0;
     }
@@ -233,7 +233,7 @@ int set_frame_data(Connect *c, Stream *resp)
             {
                 if (data_len > min_window_size)
                 {
-                    //print_err(resp, "<%s:%d> !!! data_len(%ld) > min_window_size(%ld), id=%d \n", 
+                    //print_err(resp, "<%s:%d> !!! data_len(%ld) > min_window_size(%ld), id=%d \n",
                     //            __func__, __LINE__, data_len, min_window_size, resp->id);
                     data_len = min_window_size;
                 }
@@ -241,7 +241,7 @@ int set_frame_data(Connect *c, Stream *resp)
                 int ret = read(resp->fd, buf, data_len);
                 if (ret <= 0)
                 {
-                    print_err(resp, "<%s:%d> Error read()=%d: %s, id=%d \n", __func__, __LINE__, 
+                    print_err(resp, "<%s:%d> Error read()=%d: %s, id=%d \n", __func__, __LINE__,
                                 ret, strerror(errno), resp->id);
                     close(resp->fd);
                     resp->fd = -1;
@@ -458,7 +458,7 @@ int set_response(Connect *c, Stream *resp)
             add_header(resp, 8);                                      // "200 OK"
         add_header(resp, 54, conf->ServerSoftware.c_str());           // "server"
         add_header(resp, 33, get_time().c_str());                     // "date"
-        
+
         resp->resp_content_type = content_type(resp->path.c_str());
         if (resp->resp_content_type)
             add_header(resp, 31, resp->resp_content_type);            // "content-type"
@@ -562,7 +562,7 @@ int set_response(Connect *c, Stream *resp)
     {
         if (is_cgi(resp) < 0)
         {
-            print_err(resp, "<%s:%d> Error: CONTENT_TYPE %s, create_headers=%d, send_headers=%d\n", 
+            print_err(resp, "<%s:%d> Error: CONTENT_TYPE %s, create_headers=%d, send_headers=%d\n",
                         __func__, __LINE__, path.c_str(), resp->create_headers, resp->send_headers);
             resp_404(resp);
         }
@@ -631,7 +631,7 @@ int EventHandlerClass::http2_connection(Connect *c)
             }
             else
             {
-                print_err(c, "<%s:%d> SSL_SHUTDOWN: SSL_read() - %s\n", __func__, __LINE__, 
+                print_err(c, "<%s:%d> SSL_SHUTDOWN: SSL_read() - %s\n", __func__, __LINE__,
                             ssl_strerror(c->tls.err));
                 close_connect(c);
                 return -1;
@@ -649,7 +649,7 @@ int EventHandlerClass::http2_connection(Connect *c)
     }
     else
     {
-        print_err(c, "<%s:%d> !!! Error: type operation (%s)\n", __func__, __LINE__, 
+        print_err(c, "<%s:%d> !!! Error: type operation (%s)\n", __func__, __LINE__,
                     c->h2->get_str_status());
         ssl_shutdown(c);
         return -1;
@@ -726,10 +726,10 @@ int EventHandlerClass::recv_frame_(Connect *c)
         if (ret <= 0)
         {
             if (ret == ERR_TRY_AGAIN)
-                print_err(c, "<%s:%d> Error (SSL_ERROR_WANT_READ) read frame %s id=%d \n", 
+                print_err(c, "<%s:%d> Error (SSL_ERROR_WANT_READ) read frame %s id=%d \n",
                             __func__, __LINE__, get_str_frame_type(c->h2->type), c->h2->id);
             else
-                print_err(c, "<%s:%d> Error read frame %s id=%d \n", __func__, __LINE__, 
+                print_err(c, "<%s:%d> Error read frame %s id=%d \n", __func__, __LINE__,
                             get_str_frame_type(c->h2->type), c->h2->id);
             return ret;
         }
@@ -768,7 +768,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                     n += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
                     if (conf->PrintDebugMsg)
-                        print_err(c, "<%s:%d> SETTINGS_HEADER_TABLE_SIZE [%ld] id=%d \n", 
+                        print_err(c, "<%s:%d> SETTINGS_HEADER_TABLE_SIZE [%ld] id=%d \n",
                                         __func__, __LINE__, n, 0);
                 }
                 else if (c->h2->body.get_byte(ind + 1) == 4)
@@ -778,7 +778,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                     c->h2->init_window_size += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
                     c->h2->init_window_size += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
                     if (conf->PrintDebugMsg)
-                        print_err(c, "<%s:%d> SETTINGS_INITIAL_WINDOW_SIZE [%ld] id=%d \n", 
+                        print_err(c, "<%s:%d> SETTINGS_INITIAL_WINDOW_SIZE [%ld] id=%d \n",
                                         __func__, __LINE__, c->h2->init_window_size, 0);
                 }
                 else if (c->h2->body.get_byte(ind + 1) == 5)
@@ -792,7 +792,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                         setDataBufSize(n);
                     }
                     if (conf->PrintDebugMsg)
-                        print_err(c, "<%s:%d> SETTINGS_MAX_FRAME_SIZE [%ld], conf->HTTP2_DataBufSize=%d, id=0 \n", 
+                        print_err(c, "<%s:%d> SETTINGS_MAX_FRAME_SIZE [%ld], conf->HTTP2_DataBufSize=%d, id=0 \n",
                                         __func__, __LINE__, n, conf->HTTP2_DataBufSize);
                 }
             }
@@ -860,7 +860,7 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             if (body_len < 100)
             {
-                print_err(resp, "<%s:%d> recv DATA %d, con.cgi_window_size=%ld, stream.cgi_windows_size=%ld, id=%d \n", 
+                print_err(resp, "<%s:%d> recv DATA %d, con.cgi_window_size=%ld, stream.cgi_windows_size=%ld, id=%d \n",
                                 __func__, __LINE__, body_len, c->h2->cgi_window_size, resp->cgi.windows_size, resp->id);
             }
         }
@@ -1172,7 +1172,7 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
         {
             if (conf->PrintDebugMsg)
             {
-                print_err(resp, "<%s:%d>... send frame HEADERS, END_STREAM, [%s] send %lld bytes ... id=%d \n", 
+                print_err(resp, "<%s:%d>... send frame HEADERS, END_STREAM, [%s] send %lld bytes ... id=%d \n",
                         __func__, __LINE__, resp->clean_decode_path, resp->send_bytes, resp->id);
             }
 
@@ -1274,7 +1274,7 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
     {
         if (conf->PrintDebugMsg)
         {
-            print_err(resp, "<%s:%d>... send frame DATA, END_STREAM, [%s] send %lld bytes, data.size=%d ... id=%d \n", 
+            print_err(resp, "<%s:%d>... send frame DATA, END_STREAM, [%s] send %lld bytes, data.size=%d ... id=%d \n",
                         __func__, __LINE__, resp->clean_decode_path, resp->send_bytes, resp->send_data.size(), resp->id);
         }
 
@@ -1325,7 +1325,7 @@ int EventHandlerClass::send_frame_settings(Connect *c)
         else
             c->h2->settings.init();
     }
-    
+
     if (c->h2->send_settings_ack && c->h2->recv_settings_ack)
     {
         c->h2->con_status = http2::PROCESSING_REQUESTS;

@@ -294,7 +294,7 @@ int http2::get_str(std::string& str, int *len)
 //----------------------------------------------------------------------
 int http2::get_header(int ind, std::string& name, std::string& val, int *len)
 {
-    if (ind == 0x00)
+    if ((ind == 0x00) && len)
     {
         if (get_str(name, len) < 0)
             return -1;
@@ -303,40 +303,61 @@ int http2::get_header(int ind, std::string& name, std::string& val, int *len)
     {
         if (ind > 61)
         {
-            Header *hd = dyn_tab->get(ind);
-            if (hd)
-                name = hd->name;
+            if (dyn_tab)
+            {
+                Header *hd = dyn_tab->get(ind);
+                if (hd)
+                {
+                    name = hd->name;
+                    if (len == NULL)
+                        val = hd->val;
+                }
+                else
+                {
+                    return -1;
+                }
+            }
             else
             {
-                name = "?";
-                //return -1;
+                print_err("<%s:%d> ind=%d Dynamic Table is not created\n", __func__, __LINE__, ind);
             }
         }
         else
+        {
             name = static_tab[ind][0];
+            if (len == NULL)
+                val = static_tab[ind][1];
+        }
     }
 
-    if (get_str(val, len) < 0)
-        return -1;
+    if (len)
+    {
+        if (get_str(val, len) < 0)
+            return -1;
+    }
+
     return 0;
 }
 //----------------------------------------------------------------------
 int http2::parse(Stream *r)
 {
-    int len = 0;
+    int offset = 0;
     int ch;
     if (flags & 0x08) // PADDED (0x8)
-        ++len;
+        ++offset;
     if (flags & 0x20) // PRIORITY (0x20)
-        len += 5;
+        offset += 5;
     std::string name;
     name.reserve(32);
     std::string val;
     val.reserve(128);
 
-    for ( ; len < body.size(); )
+    for ( ; offset < body.size(); )
     {
-        if ((ch = body.get_byte(len++)) < 0)
+        name = "?";
+        val = "?";
+
+        if ((ch = body.get_byte(offset++)) < 0)
         {
             fprintf(stderr, "<%s:%d> Error ch=%d, 0x%X\n", __func__, __LINE__, ch, ch);
             return -1;
@@ -344,53 +365,38 @@ int http2::parse(Stream *r)
 
         if (ch > 0x80)
         {// <0x81 ... 0xFF> ; static table: [0x81 ... 0x3D], dynamic table: [0x3E ...]
-            int ind = bytes_to_int(ch & 0x7f, 7, body.ptr(), &len, body.size());
-            if (ind > 61)
-            {
-                Header *hd = dyn_tab->get(ind);
-                if (hd)
-                {
-                    name = hd->name;
-                    val = hd->val;
-                }
-                else
-                {
-                    name = "?";
-                    val = "?";
-                    //return -1;
-                }
-            }
-            else
-            {
-                name = static_tab[ind][0];
-                val = static_tab[ind][1];
-            }
+            int ind = bytes_to_int(ch & 0x7f, 7, body.ptr(), &offset, body.size());
+            if (get_header(ind, name, val, NULL) < 0)
+                return -1;
         }
         else if ((ch >= 0x40) && (ch <= 0x7f))
         {// <0x40><len><name><len><val>, <0x41 ... 0x7F><index><len><val> ---> dyn_tab
-            int ind = bytes_to_int(ch & 0x3f, 6, body.ptr(), &len, body.size());
-            if (get_header(ind, name, val, &len) < 0)
+            int ind = bytes_to_int(ch & 0x3f, 6, body.ptr(), &offset, body.size());
+            if (get_header(ind, name, val, &offset) < 0)
                 return -1;
             if (conf->PrintDebugMsg)
                 fprintf(stderr, "<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
             if ((conf->HeaderTableSize > 0) && dyn_tab)
-                dyn_tab->add(name.c_str(), val.c_str());
+            {
+                if (dyn_tab->add(name, val) < 0)
+                    return -1;
+            }
         }
         else if ((ch >= 0x00) && (ch <= 0x0f))
         {// <0x00><len><name><len><val>, <0x01 ... 0x0F><index><len><val>
-            int ind = bytes_to_int(ch, 4, body.ptr(), &len, body.size());
-            if (get_header(ind, name, val, &len) < 0)
+            int ind = bytes_to_int(ch, 4, body.ptr(), &offset, body.size());
+            if (get_header(ind, name, val, &offset) < 0)
                 return -1;
         }
         else if ((ch >= 0x10) && (ch <= 0x1f))
         {// <0x10><len><name><len><val>, <0x11 ... 0x1F><index><len><val>
-            int ind = bytes_to_int(ch & 0x0f, 4, body.ptr(), &len, body.size());
-            if (get_header(ind, name, val, &len) < 0)
+            int ind = bytes_to_int(ch & 0x0f, 4, body.ptr(), &offset, body.size());
+            if (get_header(ind, name, val, &offset) < 0)
                 return -1;
         }
         else if ((ch >= 0x20) && (ch <= 0x3f))
         {// Dynamic Table Size Update
-            int size = bytes_to_int(ch & 0x1f, 5, body.ptr(), &len, body.size());
+            int size = bytes_to_int(ch & 0x1f, 5, body.ptr(), &offset, body.size());
             fprintf(stderr, "[%lu/%lu] <%s:%d>--- Dynamic Table Size Update: %d ---\n", r->numConn, r->numReq, __func__, __LINE__, size);
             continue;
         }
@@ -401,7 +407,7 @@ int http2::parse(Stream *r)
         }
 
         if (conf->PrintDebugMsg)
-            fprintf(stderr, "[%lu/%lu] <%s:%d> [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, name.c_str(), val.c_str());
+            fprintf(stderr, "[%lu/%lu] <%s:%d> 0x%02X [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, (int)ch, name.c_str(), val.c_str());
 
         if (name == ":method")
         {
@@ -452,7 +458,61 @@ int http2::parse(Stream *r)
         }
     }
 
-    if ((conf->PrintDebugMsg) && dyn_tab)
-        dyn_tab->print();
+    if (conf->PrintDebugMsg)
+    {
+        if (dyn_tab)
+            dyn_tab->print();
+    }
+    return 0;
+}
+//======================================================================
+int DynamicTable::add(std::string& name, std::string& val)
+{
+    int size = name.size() + val.size() + 32;
+    if (max_table_size == 0)
+        return 0;
+    while ((table_size + size) > max_table_size)
+    {
+        --headers_num;
+        delete [] table[headers_num].name;
+        table[headers_num].name = NULL;
+        table[headers_num].val = NULL;
+        table_size -= table[headers_num].size;
+        table[headers_num].size = 0;
+        if (table_size <= 0)
+        {
+            return -1;
+        }
+    }
+
+    if (headers_num >= max_headers_num)
+    {
+        fprintf(stderr, "<%s:%d> Error headers_num(%d) >= max_headers_num(%d)\n", __func__, __LINE__, 
+                        headers_num, max_table_size);
+        return -1;
+    }
+
+    for ( int i = headers_num; i > 0; --i)
+    {
+        table[i] = table[i - 1];
+    }
+
+    table[0].size = 0;
+
+    table[0].name = new(std::nothrow) char [name.size() + val.size() + 2];
+    if (!table[0].name)
+    {
+        table[0].val = NULL;
+        return -1;
+    }
+    memcpy(table[0].name, name.c_str(), name.size() + 1);
+
+    table[0].val = table[0].name + name.size() + 1;
+    memcpy(table[0].val, val.c_str(), val.size() + 1);
+
+    table[0].size = size;
+    ++headers_num;
+    table_size += size;
+
     return 0;
 }

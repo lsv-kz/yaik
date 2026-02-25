@@ -76,7 +76,7 @@ int set_response(Connect *c)
 
     memcpy(c->h1->resp.clean_decode_path, c->h1->resp.decode_path.c_str(), len);
     c->h1->resp.clean_decode_path[len] = 0;
-    
+
     if (c->h1->resp.query_string.size())
     {
         decode(c->h1->resp.query_string.c_str(), c->h1->resp.query_string.size(), c->h1->resp.decode_query_string);
@@ -288,7 +288,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             {
                 if (ret != ERR_TRY_AGAIN)
                 {
-                    print_err(c, "<%s:%d> Error send headers: %d, %d/%d\n", __func__, __LINE__, 
+                    print_err(c, "<%s:%d> Error send headers: %d, %d/%d\n", __func__, __LINE__,
                             ret, c->h1->resp.headers.size_remain(), c->h1->resp.headers.size());
                     c->err = ret;
                     http1_end_request(c);
@@ -337,7 +337,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                 write_bytes = c->h1->resp.send_data.read_file(c->h1->resp.fd, data_len);
                 if (write_bytes < 0)
                 {
-                    print_err(c, "<%s:%d> Error read(fd=%d)=%d: %s\n", __func__, __LINE__, 
+                    print_err(c, "<%s:%d> Error read(fd=%d)=%d: %s\n", __func__, __LINE__,
                                 c->h1->resp.fd, write_bytes, strerror(errno));
                     c->err = -1;
                     http1_end_request(c);
@@ -373,7 +373,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
         {
             if (ret != ERR_TRY_AGAIN)
             {
-                print_err(c, "<%s:%d> Error send data: %d, send %lld bytes, %d/%d\n", __func__, __LINE__, 
+                print_err(c, "<%s:%d> Error send data: %d, send %lld bytes, %d/%d\n", __func__, __LINE__,
                     ret, c->h1->resp.send_bytes, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
                 c->err = ret;
                 http1_end_request(c);
@@ -389,7 +389,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             c->h1->resp.send_data.set_offset(ret);
             if (c->h1->resp.send_data.size_remain())
             {
-                //print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__, 
+                //print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__,
                 //            ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
                 return 0;
             }
@@ -467,7 +467,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
 {
     if (c->h1->resp.source_data == DYN_PAGE)
     {
-        if ((c->h1->resp.cgi_type == CGI) || 
+        if ((c->h1->resp.cgi_type == CGI) ||
             (c->h1->resp.cgi_type == PHPCGI))
         {
             if (c->h1->resp.cgi.from_script > 0)
@@ -484,7 +484,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
 
             kill_chld(c->h1->resp.cgi.pid);
         }
-        else if ((c->h1->resp.cgi_type == PHPFPM) || 
+        else if ((c->h1->resp.cgi_type == PHPFPM) ||
                 (c->h1->resp.cgi_type == FASTCGI) ||
                 (c->h1->resp.cgi_type == SCGI))
         {
@@ -638,7 +638,7 @@ static int parse_header(Connect *c, const char *s)
             break;
         }
     }
-    
+
     if (s[i] == ' ')
     {
         return -RS400;
@@ -646,7 +646,7 @@ static int parse_header(Connect *c, const char *s)
 
     if (strstr_case(s, "accept-encoding:"))
     {
-        
+
     }
     else if (strstr_case(s, "connection:"))
     {
@@ -678,7 +678,7 @@ static int parse_header(Connect *c, const char *s)
     }
     else if (strstr_case(s, "upgrade:"))
     {
-        
+
     }
     else if (strstr_case(s, "user-agent:"))
     {
@@ -805,7 +805,7 @@ int create_response_headers(Connect *c)
                 if (c->h1->resp.resp_content_type)
                     headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
                 headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
-        
+
                 headers << "Content-Range: bytes " << c->h1->resp.offset << "-"
                                                 << (c->h1->resp.offset + c->h1->resp.resp_content_len - 1)
                                                 << "/" << c->h1->resp.file_size << "\r\n";

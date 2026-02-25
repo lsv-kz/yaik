@@ -87,7 +87,7 @@ int EventHandlerClass::cgi_stdout(Connect *c, int fd)
     else if (ret > 0)
     {
         c->h1->resp.cgi.timer = 0;
-        
+
         if (c->h1->resp.create_headers == false)
         {
             buf[ret] = 0;
@@ -251,7 +251,7 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
             }
             else
             {
-                if ((con->h1->con_status == http1::SEND_RESP_HEADERS) && 
+                if ((con->h1->con_status == http1::SEND_RESP_HEADERS) &&
                     (con->h1->resp.create_headers == false)
                 )
                 {

@@ -297,7 +297,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         }
         else if (revents != 0)
         {
-            print_err(resp, "<%s:%d> Error 0x%02X(0x%02X), fd=%d, id=%d \n", __func__, __LINE__, 
+            print_err(resp, "<%s:%d> Error 0x%02X(0x%02X), fd=%d, id=%d \n", __func__, __LINE__,
                         revents, events, fd, resp->id);
             resp_502(resp);
         }
@@ -338,7 +338,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         }
         else
         {
-            print_err(resp, "<%s:%d> FASTCGI_PARAMS Error revents=0x%02X, id=%d \n", 
+            print_err(resp, "<%s:%d> FASTCGI_PARAMS Error revents=0x%02X, id=%d \n",
                             __func__, __LINE__, revents, resp->id);
             resp_502(resp);
         }
@@ -347,7 +347,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
     {
         if (revents != POLLOUT)
         {
-            print_err(resp, "<%s:%d> FASTCGI_STDIN Error revents=0x%02X, id=%d \n", 
+            print_err(resp, "<%s:%d> FASTCGI_STDIN Error revents=0x%02X, id=%d \n",
                             __func__, __LINE__, revents, resp->id);
             resp_502(resp);
             return;
@@ -358,7 +358,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         {
             if (errno != EAGAIN)
             {
-                print_err(resp, "<%s:%d> Error write()=%d: %s; id=%d \n", __func__, __LINE__, 
+                print_err(resp, "<%s:%d> Error write()=%d: %s; id=%d \n", __func__, __LINE__,
                             ret, strerror(errno), resp->id);
                 resp->post_data.init();
                 resp_502(resp);
@@ -379,7 +379,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         }
         else
         {
-            print_err(resp, "<%s:%d> !!! Error write()=%d(%d), id=%d \n", 
+            print_err(resp, "<%s:%d> !!! Error write()=%d(%d), id=%d \n",
                         __func__, __LINE__, ret, resp->post_data.size_remain(), resp->id);
         }
     }
@@ -387,7 +387,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
     {
         if (revents != POLLIN)
         {
-            print_err(resp, "<%s:%d> FASTCGI_STDOUT Error revents=0x%02X, id=%d \n", 
+            print_err(resp, "<%s:%d> FASTCGI_STDOUT Error revents=0x%02X, id=%d \n",
                         __func__, __LINE__, revents, resp->id);
             if (resp->send_headers == false)
                 resp_502(resp);

@@ -11,12 +11,6 @@ enum HTTP_METHOD
     M_PATCH, M_DELETE, M_TRACE, M_CONNECT
 };
 
-struct Header
-{
-    char *name;
-    char *val;
-};
-
 struct Param
 {
     std::string name;
@@ -118,9 +112,9 @@ struct Server
     bool SecureConnect;
     bool EnableHTTP2;
     SSL_CTX *ctx;
-    
+
     VHost *vhosts;
-    
+
     Server()
     {
         next = NULL;
@@ -233,7 +227,7 @@ public:
                 serv->vhosts = h->next;
                 delete h;
             }
-            
+
             all_servers = serv->next;
             delete serv;
         }
@@ -251,7 +245,7 @@ public:
             fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
             exit(errno);
         }
-        
+
         num_servers++;
         return serv;
     }
@@ -365,7 +359,7 @@ struct Stream
         if (conf->PrintDebugMsg)
         {
             if ((send_bytes != file_size) && (source_data == FROM_FILE))
-                print_err("<%s:%d> !!! ~Resp(%s), send_bytes=%lld(%lld), stream_window_size=%ld, id=%d \n", 
+                print_err("<%s:%d> !!! ~Resp(%s), send_bytes=%lld(%lld), stream_window_size=%ld, id=%d \n",
                         __func__, __LINE__, clean_decode_path, send_bytes, file_size, stream_window_size, id);
         }
 
@@ -426,7 +420,7 @@ struct Stream
         send_headers = false;
         create_headers = false;
         resp_status = 0;
-        
+
         source_data = NO_SOURCE;
         fd = -1;
         file_size = 0;
@@ -451,11 +445,23 @@ private:
     Stream& operator=(const Stream&);
 };
 //======================================================================
+struct Header
+{
+    char *name;
+    char *val;
+    int size;
+};
+//----------------------------------------------------------------------
 class DynamicTable
 {
     Header *table;
+    
+    int max_table_size;
     int table_size;
-    int table_len;
+
+    int max_headers_num;
+    int headers_num;
+    
     int offset;
     int err;
 
@@ -465,20 +471,22 @@ class DynamicTable
 
 public:
 
-    DynamicTable(int n, int offs)
+    DynamicTable(int size_, int offs)
     {
-        table_size = n;
+        max_table_size = size_;
+        max_headers_num = max_table_size/20;
+        table_size = 0;
         offset = offs;
-        table_len = err = 0;
-        table = new(std::nothrow) Header [table_size];
+        headers_num = err = 0;
+        table = new(std::nothrow) Header [max_table_size];
         if (!table)
         {
             fprintf(stderr, "<%s:%d> Error: %s\n", __func__, __LINE__, strerror(errno));
-            table_size = 0;
+            max_table_size = 0;
             err = 1;
             return;
         }
-
+        fprintf(stderr, "<%s:%d> table_size=%d, max_headers_num=%d, offset=%d\n", __func__, __LINE__, max_table_size, max_headers_num, offset);
         table[0].name = NULL;
         table[0].val = NULL;
     }
@@ -488,12 +496,11 @@ public:
         if (table)
         {
             //fprintf(stderr, "<%s:%d> ~~~ Delete Dynamic Table\n", __func__, __LINE__);
-            for ( int i = 0; i < table_len; ++i)
+            for ( int i = 0; i < headers_num; ++i)
             {
                 if (table[i].name && table[i].val)
                 {
                     delete [] table[i].name;
-                    delete [] table[i].val;
                 }
             }
             delete [] table;
@@ -501,54 +508,12 @@ public:
         }
     }
     //------------------------------------------------------------------
-    int add(const char *name, const char *val)
-    {
-        if (table_size == 0)
-            return 0;
-        if (table_len == table_size)
-        {
-            --table_len;
-            delete [] table[table_len].name;
-            table[table_len].name = NULL;
-            delete [] table[table_len].val;
-            table[table_len].val = NULL;
-        }
-
-        for ( int i = table_len; i > 0; --i)
-        {
-            table[i] = table[i - 1];
-        }
-
-        table[0].name = NULL;
-        table[0].val = NULL;
-
-        int len = strlen(name);
-        char *n = new(std::nothrow) char [len + 1];
-        if (!n)
-        {
-            return -1;
-        }
-        memcpy(n, name, len + 1);
-        
-        len = strlen(val);
-        char *v = new(std::nothrow) char [len + 1];
-        if (!v)
-        {
-            delete [] n;
-            return -1;
-        }
-        memcpy(v, val, len + 1);
-
-        table[0].name = n;
-        table[0].val = v;
-        ++table_len;
-        return 0;
-    }
+    int add(std::string& name, std::string& val);
     //------------------------------------------------------------------
     void print()
     {
-        fprintf(stderr, " -------- Dynamic table %d --------\n", table_len);
-        for ( int i = 0; i < table_len; ++i)
+        fprintf(stderr, " -------- Dynamic table %d, size %d --------\n", headers_num, table_size);
+        for ( int i = 0; i < headers_num; ++i)
         {
             fprintf(stderr, " %04d  [%s: %s]\n", i + offset, table[i].name, table[i].val);
         }
@@ -556,9 +521,9 @@ public:
     //------------------------------------------------------------------
     Header *get(int n)
     {
-        if ((n < offset) || (n >= (table_len + offset)))
+        if ((n < offset) || (n >= (headers_num + offset)))
         {
-            fprintf(stderr, "<%s:%d> Error out of range: index=%d, table_len=%d, offset=%d\n", __func__, __LINE__, n, table_len, offset);
+            fprintf(stderr, "<%s:%d> Error out of range: index=%d, table_len=%d, offset=%d\n", __func__, __LINE__, n, headers_num, offset);
             return NULL;
         }
 

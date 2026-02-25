@@ -36,7 +36,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
         }
         else if (revents != 0)
         {
-            print_err(c, "<%s:%d> Error 0x%02X(0x%02X), fd=%d\n", __func__, __LINE__, 
+            print_err(c, "<%s:%d> Error 0x%02X(0x%02X), fd=%d\n", __func__, __LINE__,
                         revents, events, fd);
             c->err = -RS502;
             http1_end_request(c);
@@ -184,7 +184,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             c->h1->resp.cgi.fcgiPaddingLen = (unsigned char)s[6];
             if ((c->h1->resp.cgi.fcgiContentLen > 65535) || (c->h1->resp.cgi.fcgiPaddingLen > 255))
             {
-                print_err(c, "<%s:%d> Error fcgiContentLen=%d, fcgiPaddingLen=%d\n", __func__, __LINE__, 
+                print_err(c, "<%s:%d> Error fcgiContentLen=%d, fcgiPaddingLen=%d\n", __func__, __LINE__,
                             c->h1->resp.cgi.fcgiContentLen, c->h1->resp.cgi.fcgiPaddingLen);
                 hex_print_stderr(__func__, __LINE__, s, 8);
                 c->err = -1;
@@ -371,7 +371,7 @@ void EventHandlerClass::fcgi_get_headers(Connect *c)
                 else
                     c->h1->resp.send_data.set_offset(p - c->h1->resp.send_data.ptr());
             }
-            
+
             c->h1->resp.resp_status = RS200;
             c->h1->resp.resp_content_len = -1;
             if (create_response_headers(c) < 0)

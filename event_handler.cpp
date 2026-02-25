@@ -175,7 +175,7 @@ int EventHandlerClass::http2_cgi_set(Connect *c)
             resp->cgi.timer = t;
         if (resp->cgi.start && ((t - resp->cgi.timer) >= conf->TimeoutCGI))
         {
-            print_err(resp, "<%s:%d> TimeoutCGI=%ld, send_headers=%d, cgi.op=%s, id=%d \n", __func__, __LINE__, 
+            print_err(resp, "<%s:%d> TimeoutCGI=%ld, send_headers=%d, cgi.op=%s, id=%d \n", __func__, __LINE__,
                     t - resp->cgi.timer, resp->send_headers, get_cgi_status(resp->cgi_status), resp->id);
             c->h2->frame_win_update.init();
             resp->frame_win_update.init();
@@ -296,7 +296,7 @@ void EventHandlerClass::http2_cgi_poll(Connect *c, int cgi_poll_ind)
     {
         //if (conf->PrintDebugMsg)
         {
-            print_err(resp, "<%s:%d> revents=0x%02X, (fd(%d) != cgi.fd(%d/%d/%d)), cgi.end=%d, id=%d \n", __func__, __LINE__, 
+            print_err(resp, "<%s:%d> revents=0x%02X, (fd(%d) != cgi.fd(%d/%d/%d)), cgi.end=%d, id=%d \n", __func__, __LINE__,
                 revents, fd, resp->cgi.to_script, resp->cgi.from_script, resp->cgi.fd, resp->cgi.end, resp->id);
         }
         return;
@@ -344,7 +344,7 @@ int EventHandlerClass::http1_cgi_set(Connect *c)
         c->h1->resp.cgi.timer = t;
     if (c->h1->resp.cgi.start && ((t - c->h1->resp.cgi.timer) >= conf->TimeoutCGI))
     {
-        print_err(c, "<%s:%d> TimeoutCGI=%ld, %s, cgi_status=%s\n", __func__, __LINE__, 
+        print_err(c, "<%s:%d> TimeoutCGI=%ld, %s, cgi_status=%s\n", __func__, __LINE__,
                     t - c->h1->resp.cgi.timer, c->h1->get_str_status(), get_cgi_status(c->h1->resp.cgi_status));
         if (c->h1->resp.send_headers == false)
             c->err = -RS504;
@@ -413,8 +413,8 @@ int EventHandlerClass::http1_cgi_set(Connect *c)
         return 0;
     }
 
-    if ((c->h1->resp.cgi_status == FASTCGI_BEGIN) || 
-        (c->h1->resp.cgi_status == FASTCGI_PARAMS) || 
+    if ((c->h1->resp.cgi_status == FASTCGI_BEGIN) ||
+        (c->h1->resp.cgi_status == FASTCGI_PARAMS) ||
         (c->h1->resp.cgi_status == SCGI_PARAMS)
     )
     {
@@ -440,7 +440,7 @@ int EventHandlerClass::http1_cgi_set(Connect *c)
         cgi_array[num_poll] = &c->h1->resp;
         ++num_poll;
     }
-    else if ((c->h1->resp.cgi_status == CGI_STDOUT) && 
+    else if ((c->h1->resp.cgi_status == CGI_STDOUT) &&
              ((c->h1->resp.send_data.size() == 0) || (c->h1->resp.create_headers == false))
     )
     {
@@ -504,7 +504,7 @@ void EventHandlerClass::set_poll()
     {
         if (num_poll >= conf->MaxAcceptConnections)
         {
-            print_err(c, "<%s:%d> !!! num_poll[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__, 
+            print_err(c, "<%s:%d> !!! num_poll[%d] >= conf->MaxAcceptConnections[%d]\n", __func__, __LINE__,
                     num_poll, conf->MaxAcceptConnections);
             break;
         }
@@ -580,8 +580,8 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                         return;
                     }
                 }
-                else if ((c->h1->resp.post_content_len > 0) && 
-                         (c->h1->resp.httpMethod == M_POST) && 
+                else if ((c->h1->resp.post_content_len > 0) &&
+                         (c->h1->resp.httpMethod == M_POST) &&
                          (c->h1->resp.post_data.size() == 0)
                 )
                 {
@@ -681,7 +681,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
         {
             if (conf->PrintDebugMsg)
             {
-                print_err(c, "<%s:%d> ***** SSL_pending()=%d, %s\n", __func__, __LINE__, 
+                print_err(c, "<%s:%d> ***** SSL_pending()=%d, %s\n", __func__, __LINE__,
                             pending, c->h2->get_str_status());
             }
 
@@ -705,7 +705,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
 
         if (ret < 0)
             return;
-            
+
         if (c->h2->work_stream == NULL)
             c->h2->work_stream = c->h2->start_stream;
 
@@ -767,9 +767,9 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 if (resp_next == NULL)
                     resp_next = c->h2->start_stream;
 
-                if (resp->frame_win_update.size() || 
-                    resp->headers.size() || 
-                    resp->send_data.size() || 
+                if (resp->frame_win_update.size() ||
+                    resp->headers.size() ||
+                    resp->send_data.size() ||
                     resp->rst_stream ||
                     (resp->send_headers && (resp->stream_window_size > 0))
                 )
@@ -778,7 +778,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                     c->h2->work_stream = resp;
                     break;
                 }
-                    
+
                 if (resp_next == c->h2->work_stream)
                     break;
             }

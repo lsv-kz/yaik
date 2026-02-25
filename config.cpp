@@ -48,55 +48,43 @@ void create_conf_file(const char *path)
     }
 
     fprintf(f, "PrintDebugMsg        off       # on, off\n\n");
-
     fprintf(f, "ServerSoftware       ?\n\n");
-
     fprintf(f, "LogPath              ?\n");
     fprintf(f, "PidFilePath          ?\n\n");
-    
     fprintf(f, "server {\n");
-    fprintf(f, "    ip   0.0.0.0\n");
-    fprintf(f, "    ServerPort  8443\n");
+    fprintf(f, "    ip             0.0.0.0\n");
+    fprintf(f, "    ServerPort     443\n");
     fprintf(f, "    SecureConnect  on\n");
     fprintf(f, "    EnableHTTP2    on\n");
     fprintf(f, "    vhost {\n");
-    fprintf(f, "        HostName         ?\n");
-    fprintf(f, "        DocumentRoot     ?\n");
+    fprintf(f, "        HostName         my-example.com\n");
+    fprintf(f, "        DocumentRoot     /?/my-example.com\n");
     fprintf(f, "        Certificate      ?\n");
     fprintf(f, "        CertificateKey   ?\n");
     fprintf(f, "    }\n");
-    fprintf(f, "}\n");
-
+    fprintf(f, "}\n\n");
     fprintf(f, "server {\n");
-    fprintf(f, "    ip   0.0.0.0\n");
-    fprintf(f, "    ServerPort  8080\n");
+    fprintf(f, "    ip             0.0.0.0\n");
+    fprintf(f, "    ServerPort     80\n");
     fprintf(f, "    vhost {\n");
     fprintf(f, "        HostName         ?\n");
     fprintf(f, "        DocumentRoot     ?\n");
     fprintf(f, "    }\n");
-    fprintf(f, "}\n");
-
-    fprintf(f, "ListenBacklog        4096\n");
-    fprintf(f, "TcpNoDelay           on\n\n");
-
+    fprintf(f, "}\n\n");
+    fprintf(f, "ListenBacklog         4096\n");
+    fprintf(f, "TcpNoDelay            on\n\n");
     fprintf(f, "HeaderTableSize       0\n");
     fprintf(f, "MaxConcurrentStreams  10\n\n");
-
     fprintf(f, "MaxAcceptConnections  10000\n\n");
-    
     fprintf(f, "MaxRequestsPerClient  1000\n\n");
-
-    fprintf(f, "HTTP1_DataBufSize          262144\n");
-    fprintf(f, "HTTP2_DataBufSize          16384\n\n");
-
-    fprintf(f, "Timeout              35  # seconds\n");
-    fprintf(f, "TimeoutKeepAlive     120 # seconds\n");
-    fprintf(f, "TimeoutPoll          10  # milliseconds\n\n");
-
-    fprintf(f, "ShowMediaFiles       off\n\n");
-
-    fprintf(f, "User                 root\n");
-    fprintf(f, "Group                www-data\n");
+    fprintf(f, "HTTP1_DataBufSize     262144\n");
+    fprintf(f, "HTTP2_DataBufSize     16384\n\n");
+    fprintf(f, "Timeout               35  # seconds\n");
+    fprintf(f, "TimeoutKeepAlive      120 # seconds\n");
+    fprintf(f, "TimeoutPoll           10  # milliseconds\n\n");
+    fprintf(f, "ShowMediaFiles        off\n\n");
+    fprintf(f, "User                  root\n");
+    fprintf(f, "Group                 www-data\n");
 
     fclose(f);
 }
@@ -282,7 +270,7 @@ int read_conf_file(FILE *fconf)
                     c.PrintDebugMsg = false;
                 else
                 {
-                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
                             __func__, __LINE__, line_, ss.c_str());
                     return -1;
                 }
@@ -301,7 +289,7 @@ int read_conf_file(FILE *fconf)
                     c.TcpNoDelay = false;
                 else
                 {
-                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
                             __func__, __LINE__, line_, ss.c_str());
                     return -1;
                 }
@@ -366,7 +354,7 @@ int read_conf_file(FILE *fconf)
                     c.ShowMediaFiles = false;
                 else
                 {
-                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                    fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
                             __func__, __LINE__, line_, ss.c_str());
                     return -1;
                 }
@@ -425,7 +413,7 @@ int read_conf_file(FILE *fconf)
                                 serv->SecureConnect = false;
                             else
                             {
-                                fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                                fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
                                         __func__, __LINE__, line_, ss.c_str());
                                 return -1;
                             }
@@ -438,7 +426,7 @@ int read_conf_file(FILE *fconf)
                                 serv->EnableHTTP2 = false;
                             else
                             {
-                                fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n", 
+                                fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
                                         __func__, __LINE__, line_, ss.c_str());
                                 return -1;
                             }
@@ -485,7 +473,7 @@ int read_conf_file(FILE *fconf)
                                 String s1, s2;
                                 ss >> s1;
                                 ss >> s2;
-                                
+
                                 if (s1 == "HostName")
                                     s2 >> vhost->hostname;
                                 else if (s1 == "DocumentRoot")
@@ -678,7 +666,7 @@ int read_conf_file(FILE *fconf)
             {
                 if (check_path(h->DocumentRoot) == -1)
                 {
-                    fprintf(stderr, "<%s:%d> !!! Error DocumentRoot [%s], [%s]\n", __func__, __LINE__, 
+                    fprintf(stderr, "<%s:%d> !!! Error DocumentRoot [%s], [%s]\n", __func__, __LINE__,
                                     h->DocumentRoot.c_str(), h->hostname.c_str());
                     return -1;
                 }
@@ -708,7 +696,7 @@ int read_conf_file(FILE *fconf)
                             SSL_CTX_set_alpn_select_cb(serv->ctx, alpn_select_proto_cb, NULL);
                         SSL_CTX_set_tlsext_servername_callback(serv->ctx, sni_callback);
                         SSL_CTX_set_tlsext_servername_arg(serv->ctx, serv->vhosts);
-                        
+
                         SSL *ssl = SSL_new(h->ctx);
                         if (ssl)
                         {

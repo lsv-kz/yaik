@@ -212,7 +212,7 @@ int write_to_client(Connect *c, const char *buf, int len, int id)
             //fprintf(stderr, "<%s:%d> Error send(): %s\n", __func__, __LINE__, strerror(errno));
             if (errno == EAGAIN)
                 return ERR_TRY_AGAIN;
-            else 
+            else
                 return -1;
         }
         else
@@ -281,7 +281,7 @@ int socket_read_line(Connect *c)
                 print_err(c, "<%s:%d> Error\n", __func__, __LINE__);
                 return -1;
             }
-            
+
             if (len == 1)
                 --len;
             else
