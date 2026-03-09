@@ -724,7 +724,6 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
 //======================================================================
 void resp_204(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "204");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -736,7 +735,6 @@ void resp_204(Stream *resp)
 //======================================================================
 void resp_400(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 12);
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -751,7 +749,6 @@ void resp_400(Stream *resp)
 //======================================================================
 void resp_403(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "403");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -766,7 +763,6 @@ void resp_403(Stream *resp)
 //======================================================================
 void resp_404(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 13);
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -781,7 +777,6 @@ void resp_404(Stream *resp)
 //======================================================================
 void resp_411(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "411");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -796,7 +791,6 @@ void resp_411(Stream *resp)
 //======================================================================
 void resp_413(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "413");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -811,7 +805,6 @@ void resp_413(Stream *resp)
 //======================================================================
 void resp_414(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "414");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -826,7 +819,6 @@ void resp_414(Stream *resp)
 //======================================================================
 void resp_431(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "431");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -841,7 +833,6 @@ void resp_431(Stream *resp)
 //======================================================================
 void resp_500(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 14);
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -856,7 +847,6 @@ void resp_500(Stream *resp)
 //======================================================================
 void resp_502(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "502");
     add_header(resp, 54, conf->ServerSoftware.c_str());
@@ -871,7 +861,6 @@ void resp_502(Stream *resp)
 //======================================================================
 void resp_504(Stream *resp)
 {
-    resp->source_data = FROM_DATA_BUFFER;
     set_frame_headers(resp);
     add_header(resp, 8, "504");
     add_header(resp, 54, conf->ServerSoftware.c_str());

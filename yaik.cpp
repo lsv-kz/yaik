@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
     if (read_conf_file(confPath.c_str()))
         return 1;
     cout << "   ===============================\n";
-    cout << "  ScriptPath             : " << conf->ScriptPath.c_str() << "\n";
+    cout << "   ScriptPath : " << conf->ScriptPath.c_str() << "\n";
     //------------------------------------------------------------------
     create_logfiles(conf->LogPath);
     //------------------------------------------------------------------
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
         Server *serv = conf->all_servers;
         for ( ; serv; serv = serv->next)
         {
-            cout << "   ==========================\n";
+            cout << "   ===============================\n";
             cout << "   {port : " << serv->port << "}\n";
             cout << "   {sock : " << serv->sock << "}\n";
             if (serv->SecureConnect)
@@ -84,6 +84,9 @@ int main(int argc, char *argv[])
                 cout << "   [SecureConnect : " << serv->SecureConnect << "]\n";
                 cout << "   [EnableHTTP2 : " << serv->EnableHTTP2 << "]\n";
             }
+
+            if (serv->redirect.size())
+                cout << "   [Redirect : " << serv->redirect << "]\n";
             cout << "\n";
             VHost *h = serv->vhosts;
             for ( ; h; h = h->next)
@@ -103,7 +106,7 @@ int main(int argc, char *argv[])
     pid = getpid();
     cout << "\n[" << get_time().c_str() << "] - server \"" << conf->ServerSoftware.c_str()
          << "\nhardware_concurrency = " << thread::hardware_concurrency() << "\n";
-
+    cerr << "HeaderTableSize: " << conf->HeaderTableSize << "\n";
     pid_t gid = getgid();
     cout << "pid="  << pid << "; uid=" << getuid() << "; gid=" << gid << "\n";
     cerr << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << gid
@@ -202,6 +205,7 @@ void print_config()
          << "\n   MaxAcceptConnections   : " << conf->MaxAcceptConnections
          << "\n   HTTP1_DataBufSize      : " << conf->HTTP1_DataBufSize
          << "\n   HTTP2_DataBufSize      : " << conf->HTTP2_DataBufSize
+         << "\n   HeaderTableSize        : " << conf->HeaderTableSize
          << "\n   MaxCgiProc             : " << conf->MaxCgiProc
          << "\n   Timeout                : " << conf->Timeout
          << "\n   TimeoutKeepAlive       : " << conf->TimeoutKeepAlive

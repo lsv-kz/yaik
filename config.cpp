@@ -47,45 +47,52 @@ void create_conf_file(const char *path)
         exit(1);
     }
 
-    fprintf(f, "PrintDebugMsg        off       # on, off\n\n");
-    fprintf(f, "ServerSoftware       ?\n\n");
-    fprintf(f, "LogPath              ?\n");
-    fprintf(f, "PidFilePath          ?\n\n");
-    fprintf(f, "server {\n");
-    fprintf(f, "    ip             0.0.0.0\n");
-    fprintf(f, "    ServerPort     443\n");
-    fprintf(f, "    SecureConnect  on\n");
-    fprintf(f, "    EnableHTTP2    on\n");
-    fprintf(f, "    vhost {\n");
-    fprintf(f, "        HostName         my-example.com\n");
-    fprintf(f, "        DocumentRoot     /?/my-example.com\n");
-    fprintf(f, "        Certificate      ?\n");
-    fprintf(f, "        CertificateKey   ?\n");
-    fprintf(f, "    }\n");
-    fprintf(f, "}\n\n");
-    fprintf(f, "server {\n");
-    fprintf(f, "    ip             0.0.0.0\n");
-    fprintf(f, "    ServerPort     80\n");
-    fprintf(f, "    vhost {\n");
-    fprintf(f, "        HostName         ?\n");
-    fprintf(f, "        DocumentRoot     ?\n");
-    fprintf(f, "    }\n");
-    fprintf(f, "}\n\n");
-    fprintf(f, "ListenBacklog         4096\n");
-    fprintf(f, "TcpNoDelay            on\n\n");
-    fprintf(f, "HeaderTableSize       0\n");
-    fprintf(f, "MaxConcurrentStreams  10\n\n");
-    fprintf(f, "MaxAcceptConnections  10000\n\n");
-    fprintf(f, "MaxRequestsPerClient  1000\n\n");
-    fprintf(f, "HTTP1_DataBufSize     262144\n");
-    fprintf(f, "HTTP2_DataBufSize     16384\n\n");
-    fprintf(f, "Timeout               35  # seconds\n");
-    fprintf(f, "TimeoutKeepAlive      120 # seconds\n");
-    fprintf(f, "TimeoutPoll           10  # milliseconds\n\n");
-    fprintf(f, "ShowMediaFiles        off\n\n");
-    fprintf(f, "User                  root\n");
-    fprintf(f, "Group                 www-data\n");
+    const char *conf_file =
+    "PrintDebugMsg        off       # on, off\n\n"
+    "ServerSoftware       ?\n\n"
+    "LogPath              ?\n"
+    "PidFilePath          ?\n\n"
+    "server {\n"
+    "    ip             0.0.0.0\n"
+    "    ServerPort     80\n"
+    "    Redirect       https://my-example.com\n"
+    "}\n\n"
+    "server {\n"
+    "    ip             0.0.0.0\n"
+    "    ServerPort     443\n"
+    "    SecureConnect  on\n"
+    "    EnableHTTP2    on\n"
+    "    vhost {\n"
+    "        HostName         my-example.com\n"
+    "        DocumentRoot     /?/my-example.com\n"
+    "        Certificate      ?\n"
+    "        CertificateKey   ?\n"
+    "    }\n"
+    "}\n\n"
+    "server {\n"
+    "    ip             0.0.0.0\n"
+    "    ServerPort     8080\n"
+    "    vhost {\n"
+    "        HostName         ?\n"
+    "        DocumentRoot     ?\n"
+    "    }\n"
+    "}\n\n"
+    "ListenBacklog         4096\n"
+    "TcpNoDelay            on\n\n"
+    "HeaderTableSize       0\n"
+    "MaxConcurrentStreams  10\n\n"
+    "MaxAcceptConnections  10000\n\n"
+    "MaxRequestsPerClient  1000\n\n"
+    "HTTP1_DataBufSize     262144\n"
+    "HTTP2_DataBufSize     16384\n\n"
+    "Timeout               35  # seconds\n"
+    "TimeoutKeepAlive      120 # seconds\n"
+    "TimeoutPoll           10  # milliseconds\n\n"
+    "ShowMediaFiles        off\n\n"
+    "User                  root\n"
+    "Group                 www-data\n";
 
+    fwrite(conf_file, 1, strlen(conf_file), f);
     fclose(f);
 }
 //======================================================================
@@ -249,8 +256,8 @@ void create_fcgi_list(fcgi_list_addr **l, const string &s1, const string &s2, CG
 int read_conf_file(FILE *fconf)
 {
     String ss;
-    init_openssl();
     bool default_server = true;
+    bool SecureConnect = false;
     Server *prev_server = NULL;
 
     int n;
@@ -408,7 +415,14 @@ int read_conf_file(FILE *fconf)
                         else if (s1 == "SecureConnect")
                         {
                             if (!strcmp_case(s2.c_str(), "on"))
+                            {
                                 serv->SecureConnect = true;
+                                if (SecureConnect == false)
+                                {
+                                    init_openssl();
+                                    SecureConnect = true;
+                                }
+                            }
                             else if (!strcmp_case(s2.c_str(), "off"))
                                 serv->SecureConnect = false;
                             else
@@ -430,6 +444,10 @@ int read_conf_file(FILE *fconf)
                                         __func__, __LINE__, line_, ss.c_str());
                                 return -1;
                             }
+                        }
+                        else if (s1 == "Redirect")
+                        {
+                            s2 >> serv->redirect;
                         }
                         else
                         {
@@ -658,6 +676,20 @@ int read_conf_file(FILE *fconf)
             serv->sock = create_server_socket(serv->ip.c_str(), serv->port.c_str());
             if (serv->sock == -1)
             {
+                return -1;
+            }
+
+            if (serv->redirect.size() && serv->SecureConnect)
+            {
+                fprintf(stderr, "<%s:%d> !!! Error host [%s:%s]: Redirect only from HTTP requests\n", __func__, __LINE__,
+                                    serv->ip.c_str(), serv->port.c_str());
+                return -1;
+            }
+
+            if ((serv->vhosts == NULL) && ((serv->redirect.size() == 0) || serv->SecureConnect))
+            {
+                fprintf(stderr, "<%s:%d> !!! Error create host for socket [%s:%s]\n", __func__, __LINE__,
+                                    serv->ip.c_str(), serv->port.c_str());
                 return -1;
             }
 

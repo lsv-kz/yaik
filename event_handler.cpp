@@ -647,6 +647,19 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                 poll_fd[num_poll].events = c->tls.poll_events;
             }
         }
+        else if (c->h1->con_status == http1::REDIRECT)
+        {
+            c->h1->con_status = http1::SEND_RESP_HEADERS;
+            c->h1->resp.resp_status = RS301;
+            c->h1->hdrs = "Location: ";
+            c->h1->hdrs += c->serv->redirect.c_str();
+            c->h1->hdrs += "\r\n";
+            send_message(c, "301 Moved Permanently");
+            c->h1->connKeepAlive = false;
+
+            poll_fd[num_poll].fd = c->clientSocket;
+            poll_fd[num_poll].events = POLLOUT;
+        }
 
         if (poll_fd[num_poll].events)
             conn_array[num_poll++] = c;
@@ -656,17 +669,10 @@ void EventHandlerClass::http1_set_poll(Connect *c)
 void EventHandlerClass::http2_set_poll(Connect *c)
 {
     time_t t = time(NULL);
-    int Timeout = conf->Timeout;
     if (c->client_timer == 0)
         c->client_timer = t;
 
-    if (c->h2->con_status == http2::PROCESSING_REQUESTS)
-    {
-        if (conf->TimeoutKeepAlive > 0)
-            Timeout = conf->TimeoutKeepAlive;
-    }
-
-    if ((t - c->client_timer) >= Timeout)
+    if ((t - c->client_timer) >= conf->Timeout)
     {
         print_err(c, "<%s:%d> Timeout=%ld, %s\n", __func__, __LINE__, t - c->client_timer, c->h2->get_str_status());
         if (c->h2->con_status == http2::SSL_SHUTDOWN)
@@ -842,7 +848,6 @@ int EventHandlerClass::_poll()
                         c->h1 = new(nothrow) http1;
                         if (c->h1)
                         {
-                            c->h1->resp.numReq = 1;
                             c->h1->resp.resp_status = RS400;
                             c->h1->connKeepAlive = false;
                             send_message(c, "The plain HTTP request was sent to HTTPS port");
@@ -886,7 +891,6 @@ int EventHandlerClass::_poll()
                         if (c->h2)
                         {
                             c->h2->con_status = http2::PREFACE_MESSAGE;
-                            c->numReq = 0;
                         }
                         else
                         {
@@ -901,7 +905,6 @@ int EventHandlerClass::_poll()
                         if (c->h1)
                         {
                             c->h1->con_status = http1::READ_REQUEST;
-                            c->h1->resp.numReq = 1;
                         }
                         else
                         {

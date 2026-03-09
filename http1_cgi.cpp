@@ -10,7 +10,10 @@ void kill_chld(pid_t pid)
     if (pid > 0)
     {
         if (waitpid(pid, NULL, WNOHANG) == 0)
+        {
             kill(pid, SIGKILL);
+            waitpid(pid, NULL, 0);
+        }
     }
 
     if (errno)

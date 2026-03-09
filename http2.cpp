@@ -514,16 +514,15 @@ int set_response(Connect *c, Stream *resp)
             add_header(resp, 31, "text/plain");                       // "content-type"
             resp->create_headers = true;
 
-            ByteArray smg;
-            smg.cpy_str("301 Moved Permanently\n");
-            smg.cat(resp->path.c_str(), resp->path.size());
-
-            char s[128];
-            snprintf(s, sizeof(s), "%d", smg.size());
+            const char *msg = "301 Moved Permanently\n";
+            int len = strlen(msg);
+            char s[32];
+            snprintf(s, sizeof(s), "%d", (int)(len + resp->path.size()));
             add_header(resp, 28, s);                                  // "content-length"
-
-            set_frame_data(resp, smg.size(), FLAG_END_STREAM);
-            resp->send_data.cat(smg.ptr(), smg.size());
+            resp->send_data.reserve(9 + len + resp->path.size());
+            set_frame_data(resp, len + resp->path.size(), FLAG_END_STREAM);
+            resp->send_data.cat(msg, len);
+            resp->send_data.cat(resp->path.c_str(), resp->path.size());
             return 0;
         }
 
@@ -909,8 +908,8 @@ int EventHandlerClass::parse_frame(Connect *c)
         if (conf->PrintDebugMsg)
             hex_print_stderr(__func__, __LINE__, c->h2->body.ptr(), c->h2->body.size());
         c->client_timer = 0;
-        c->numReq++;
         Stream *resp = c->h2->add(c->numConn, c->numReq);
+        c->numReq++;
         if (resp == NULL)
         {
             print_err(c, "<%s:%d> Error id=%d \n", __func__, __LINE__, c->h2->id);

@@ -111,13 +111,8 @@ int scgi_create_params(Connect *c, Stream *resp)
     resp->cgi.vPar.push_back(param);
     ++i;
 
-    param.name = "REMOTE_ADDR";
-    param.val = c->remoteAddr;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_PORT";
-    param.val = c->remotePort;
+    param.name = "DOCUMENT_URI";
+    param.val = resp->clean_decode_path;
     resp->cgi.vPar.push_back(param);
     ++i;
 
@@ -126,8 +121,13 @@ int scgi_create_params(Connect *c, Stream *resp)
     resp->cgi.vPar.push_back(param);
     ++i;
 
-    param.name = "DOCUMENT_URI";
-    param.val = resp->clean_decode_path;
+    param.name = "REMOTE_ADDR";
+    param.val = c->remoteAddr;
+    resp->cgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "REMOTE_PORT";
+    param.val = c->remotePort;
     resp->cgi.vPar.push_back(param);
     ++i;
 

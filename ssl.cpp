@@ -48,6 +48,10 @@ int sni_callback(SSL *ssl, int *al, void *arg)
     {
         if (conf->PrintDebugMsg)
             fprintf(stderr, "<%s:%d> servername: [%s]\n", __func__, __LINE__, servername);
+
+        if (strcmp(servername, "127.0.0.1") == 0)
+            return SSL_TLSEXT_ERR_OK;
+
         VHost *h = (VHost*)arg;
         for ( ; h; h = h->next)
         {
@@ -62,9 +66,14 @@ int sni_callback(SSL *ssl, int *al, void *arg)
                 }
             }
         }
+
+        return SSL_TLSEXT_ERR_ALERT_FATAL; // SSL_ERROR_UNRECOGNIZED_NAME_ALERT
     }
     else
-        fprintf(stderr, "<%s:%d> arg=%p\n", __func__, __LINE__, arg);
+    {
+        if (conf->PrintDebugMsg)
+            fprintf(stderr, "<%s:%d> arg=%p, servername=%p\n", __func__, __LINE__, arg, servername);
+    }
     return SSL_TLSEXT_ERR_OK;
 }
 //======================================================================

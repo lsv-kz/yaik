@@ -27,15 +27,13 @@ mtx_num_conn.unlock();
     cond_num_conn.notify_one();
 }
 //======================================================================
-bool is_maxconn()
+void is_maxconn()
 {
 unique_lock<mutex> lk(mtx_num_conn);
     while (num_conn >= (conf->MaxAcceptConnections - conf->num_servers))
     {
         cond_num_conn.wait(lk);
     }
-
-    return false;
 }
 //======================================================================
 void accept_connect()
@@ -261,9 +259,11 @@ int create_connect(const Server *serv,
         con->h1 = new(nothrow) http1;
         if (con->h1)
         {
-            con->h1->con_status = http1::READ_REQUEST;
+            if (serv->redirect.size())
+                con->h1->con_status = http1::REDIRECT;
+            else
+                con->h1->con_status = http1::READ_REQUEST;
             con->h1->resp.numConn = con->numConn;
-            con->h1->resp.numReq = 1;
             start_conn();
             push_wait_list(con);
         }

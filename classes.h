@@ -108,6 +108,7 @@ struct Server
     Server *next;
     std::string ip;
     std::string port;
+    std::string redirect;
     int sock;
     bool SecureConnect;
     bool EnableHTTP2;
@@ -341,7 +342,8 @@ struct Stream
 
     Stream()
     {
-        numConn = numReq = 0;
+        numConn = 0;
+        numReq = 1;
         vhost = NULL;
         init();
         id = 0;
@@ -401,8 +403,8 @@ struct Stream
         decode_path.clear();
         decode_query_string.clear();
         host.clear();
-        user_agent.clear();
-        referer.clear();
+        user_agent = "-";
+        referer = "-";
         range.clear();
 
         buf.init();

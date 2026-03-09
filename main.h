@@ -200,6 +200,7 @@ struct http1
     enum HTTP1_STATUS {
         SSL_ACCEPT = 1,
         SSL_SHUTDOWN,
+        REDIRECT,
         READ_REQUEST,
         READ_POSTDATA,
         SEND_RESP_HEADERS,
@@ -234,6 +235,8 @@ struct http1
         {
             case SSL_ACCEPT:
                 return "SSL_ACCEPT";
+            case REDIRECT:
+                return "REDIRECT";
             case READ_REQUEST:
                 return "READ_REQUEST";
             case READ_POSTDATA:

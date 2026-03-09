@@ -34,7 +34,7 @@ int create_server_socket(const char *addr, const char *port)
 
     if (rp == NULL)
     {
-        fprintf(stderr, "Error: failed to bind\n");
+        fprintf(stderr, "Error: failed to bind [%s:%s]\n", addr, port);
         return -1;
     }
 

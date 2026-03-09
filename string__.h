@@ -99,30 +99,6 @@ class String
         append(s.buf, s.buf_len);
     }
     //------------------------------------------------------------------
-    template <typename T>
-    __attribute__((noinline)) void append(T t)
-    {
-        const unsigned int size_ = 21;
-        char s[size_];
-        int cnt, minus = (t < 0) ? 1 : 0;
-        const char *get_char = "FEDCBA9876543210123456789ABCDEF";
-        cnt = 20;
-
-        s[cnt] = 0;
-        while (cnt > 0)
-        {
-            --cnt;
-            s[cnt] = get_char[15 + (t % 10)];
-            t /= 10;
-            if (t == 0)
-                break;
-        }
-
-        if (minus)
-            s[--cnt] = '-';
-        append(s + cnt);
-    }
-    //------------------------------------------------------------------
     void init()
     {
         buf = NULL;
@@ -251,7 +227,20 @@ public:
     template <typename T>
     String& operator << (T t)
     {
-        append(t);
+        char s[21];
+        int cnt = 20, minus = (t < 0) ? 1 : 0;
+        const char *get_char = "9876543210123456789";
+
+        s[cnt] = 0;
+        while ((cnt > 0) && (t != 0))
+        {
+            s[--cnt] = get_char[9 + t % 10];
+            t /= 10;
+        }
+
+        if ((minus) && (cnt > 0))
+            s[--cnt] = '-';
+        append(s + cnt);
         return *this;
     }
     //------------------------------------------------------------------
@@ -264,6 +253,7 @@ public:
         for (; index_ < buf_size; index_++)
             if (is_space(buf[index_]))
                 break;
+        s.clear();
         s.append(buf + start, index_ - start);
         return *this;
     }
@@ -277,6 +267,7 @@ public:
         for (; index_ < buf_size; index_++)
             if (is_space(buf[index_]))
                 break;
+        s.clear();
         s.append(buf + start, index_ - start);
         return *this;
     }

@@ -82,10 +82,10 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
         else
             setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
         setenv("DOCUMENT_ROOT", resp->vhost->DocumentRoot.c_str(), 1);
+        setenv("DOCUMENT_URI", resp->clean_decode_path, 1);
+        setenv("REQUEST_URI", resp->path.c_str(), 1);
         setenv("REMOTE_ADDR", c->remoteAddr, 1);
         setenv("REMOTE_PORT", c->remotePort, 1);
-        setenv("REQUEST_URI", resp->path.c_str(), 1);
-        setenv("DOCUMENT_URI", resp->clean_decode_path, 1);
         setenv("SCRIPT_NAME", resp->clean_decode_path, 1);
         setenv("SCRIPT_FILENAME", resp->cgi.path.c_str(), 1);
 

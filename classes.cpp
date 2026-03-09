@@ -407,7 +407,7 @@ int http2::parse(Stream *r)
         }
 
         if (conf->PrintDebugMsg)
-            fprintf(stderr, "[%lu/%lu] <%s:%d> 0x%02X [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, (int)ch, name.c_str(), val.c_str());
+            fprintf(stderr, "[%lu/%lu] <%s:%d> [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, name.c_str(), val.c_str());
 
         if (name == ":method")
         {
