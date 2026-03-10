@@ -110,7 +110,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             return;
         }
 
-        if (ret != c->h1->resp.post_data.size_remain())
+        if (ret != (int)c->h1->resp.post_data.size_remain())
         {
             print_err(c, "<%s:%d> !!! Error write()=%d(%d)\n", __func__, __LINE__, ret, c->h1->resp.post_data.size_remain());
         }
@@ -285,7 +285,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
 void EventHandlerClass::fcgi_get_headers(Connect *c)
 {
     const char *p1 = c->h1->resp.send_data.ptr(), *p = NULL;
-    for (int i = 0; i < c->h1->resp.send_data.size(); ++i)
+    for (unsigned int i = 0; i < c->h1->resp.send_data.size(); ++i)
     {
         if (*(p1++) == '\n')
         {
@@ -349,7 +349,9 @@ void EventHandlerClass::fcgi_get_headers(Connect *c)
             cont_type[j] = 0;
             if (conf->PrintDebugMsg)
                 print_err(c, "<%s:%d> Content-Type: %s\n", __func__, __LINE__, cont_type);
-            c->h1->hdrs << "Content-Type: " << cont_type << "\r\n";
+            c->h1->hdrs.cat_str("Content-Type: ");
+            c->h1->hdrs.cat_str(cont_type);
+            c->h1->hdrs.cat("\r\n", 2);
             if ((p - c->h1->resp.send_data.ptr()) == c->h1->resp.send_data.size())
             {
                 c->h1->resp.send_data.init();

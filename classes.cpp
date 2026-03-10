@@ -278,7 +278,7 @@ int http2::get_str(std::string& str, int *len)
         }
     }
 
-    if ((val_len + *len) > body.size())
+    if ((val_len + *len) > (int)body.size())
     {
         fprintf(stderr, "<%s:%d> Error out of range [%d > %d]\n", __func__, __LINE__, val_len + *len, body.size());
         return -1;
@@ -352,7 +352,7 @@ int http2::parse(Stream *r)
     std::string val;
     val.reserve(128);
 
-    for ( ; offset < body.size(); )
+    for ( ; offset < (int)body.size(); )
     {
         name = "?";
         val = "?";

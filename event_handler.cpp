@@ -651,9 +651,9 @@ void EventHandlerClass::http1_set_poll(Connect *c)
         {
             c->h1->con_status = http1::SEND_RESP_HEADERS;
             c->h1->resp.resp_status = RS301;
-            c->h1->hdrs = "Location: ";
-            c->h1->hdrs += c->serv->redirect.c_str();
-            c->h1->hdrs += "\r\n";
+            c->h1->hdrs.cpy_str("Location: ");
+            c->h1->hdrs.cat(c->serv->redirect.c_str(), c->serv->redirect.size());
+            c->h1->hdrs.cat("\r\n", 2);
             send_message(c, "301 Moved Permanently");
             c->h1->connKeepAlive = false;
 

@@ -19,13 +19,18 @@ void create_logfile(const string& log_dir)
     tm1 = *localtime(&t1);
     strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &tm1);
 
-    String fileName;
-    fileName << log_dir << '/' << buf << '-' << conf->ServerSoftware << ".log";
+    ByteArray file_name;
+    file_name.cpy(log_dir.c_str(), log_dir.size());
+    file_name.cat("/", 1);
+    file_name.cat_str(buf);
+    file_name.cat("-", 1);
+    file_name.cat(conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
+    file_name.cat_str(".log");
 
-    flog = open(fileName.c_str(), O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    flog = open(file_name.ptr(), O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (flog == -1)
     {
-        cerr << " Error create log: " << fileName.c_str() << "\n";
+        cerr << " Error create log: " << file_name.ptr() << "\n";
         exit(1);
     }
 }
@@ -40,13 +45,18 @@ void create_error_logfile(const string& log_dir)
     tm1 = *localtime(&t1);
     strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &tm1);
 
-    String fileName;
-    fileName << log_dir << "/error_" << buf << '_' << conf->ServerSoftware << ".log";
+    ByteArray file_name;
+    file_name.cpy(log_dir.c_str(), log_dir.size());
+    file_name.cat_str("/error_");
+    file_name.cat_str(buf);
+    file_name.cat("_", 1);
+    file_name.cat(conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
+    file_name.cat_str(".log");
 
-    flog_err = open(fileName.c_str(), O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    flog_err = open(file_name.ptr(), O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (flog_err == -1)
     {
-        cerr << "  Error create log_err: " << fileName.c_str() << "\n";
+        cerr << "  Error create log_err: " << file_name.ptr() << "\n";
         exit(1);
     }
 
@@ -61,18 +71,29 @@ void close_logs()
 //======================================================================
 void print_err(const char *format, ...)
 {
-    va_list ap;
     char buf[300];
-
+    va_list ap;
     va_start(ap, format);
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
-    String ss(256);
-    ss << "[" << log_time() << "] - " << buf;
+
+    ByteArray str;
+    str.reserve(330);
+    if (str.error())
+    {
+        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        return;
+    }
+
+    str.cpy("[", 1);
+    str.cat_logtime();
+    str.cat("] - ", 4);
+    str.cat_str(buf);
+
 mtxLog.lock();
     if (n < (int)sizeof(buf))
     {
-        write(flog_err, ss.c_str(), ss.size());
+        write(flog_err, str.ptr(), str.size());
         num_logerr_records++;
         if (num_logerr_records > 500000)
         {
@@ -97,22 +118,35 @@ mtxLog.unlock();
 //======================================================================
 void print_err(Connect *con, const char *format, ...)
 {
-    va_list ap;
-    char buf[2048];
-
     if (!con)
         return;
-
+    char buf[768];
+    va_list ap;
     va_start(ap, format);
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
-    String ss(2048);
-    ss << "[" << log_time() << "] - [" << con->numConn << "/" << con->numReq << "] " << buf;
+
+    ByteArray str;
+    str.reserve(1024);
+    if (str.error())
+    {
+        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        return;
+    }
+
+    str.cpy("[", 1);
+    str.cat_logtime();
+    str.cat("] - [", 5);
+    str.cat_int(con->numConn);
+    str.cat("/", 1);
+    str.cat_int(con->numReq);
+    str.cat("] ", 2);
+    str.cat_str(buf);
 
 mtxLog.lock();
     if (n < (int)sizeof(buf))
     {
-        write(flog_err, ss.c_str(), ss.size());
+        write(flog_err, str.ptr(), str.size());
         num_logerr_records++;
         if (num_logerr_records > 500000)
         {
@@ -137,23 +171,39 @@ mtxLog.unlock();
 //======================================================================
 void print_err(Stream *resp, const char *format, ...)
 {
-    va_list ap;
-    char buf[1024];
     if (!resp)
     {
         fprintf(stderr, "<%s:%d> !!! resp=NULL\n", __func__, __LINE__);
         return;
     }
 
+    char buf[768];
+    va_list ap;
     va_start(ap, format);
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
-    String ss(1024);
-    ss << "[" << log_time() << "] - [" << resp->numConn << "/" << resp->numReq << "] " << buf;
+
+    ByteArray str;
+    str.reserve(1024);
+    if (str.error())
+    {
+        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        return;
+    }
+
+    str.cpy("[", 1);
+    str.cat_logtime();
+    str.cat("] - [", 5);
+    str.cat_int(resp->numConn);
+    str.cat("/", 1);
+    str.cat_int(resp->numReq);
+    str.cat("] ", 2);
+    str.cat_str(buf);
+
 mtxLog.lock();
     if (n < (int)sizeof(buf))
     {
-        write(flog_err, ss.c_str(), ss.size());
+        write(flog_err, str.ptr(), str.size());
         num_logerr_records++;
         if (num_logerr_records > 500000)
         {
@@ -178,19 +228,50 @@ mtxLog.unlock();
 //======================================================================
 void print_log(Connect *c, Stream *resp)
 {
-    String ss(320);
     if (!c || !resp)
         return;
+    ByteArray str;
+    str.reserve(1024);
+    if (str.error())
+    {
+        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        return;
+    }
 
-    ss  << resp->numConn << "/" << resp->numReq << " - " << c->remoteAddr << ":" << c->serv->port << " - [" << log_time()
-        << "] \"" << get_str_method(resp->httpMethod) << " " << resp->clean_decode_path;
+    str.cpy_int(resp->numConn);
+    str.cat("/", 1);
+    str.cat_int(resp->numReq);
+    str.cat_str(" - ");
+    str.cat_str(c->remoteAddr);
+    str.cat(":", 1);
+    str.cat(c->serv->port.c_str(), c->serv->port.size());
+    str.cat(" - [", 4);
+    str.cat_logtime();
+    str.cat("] \"", 3);
+    str.cat_str(get_str_method(resp->httpMethod));
+    str.cat(" ", 1);
+    str.cat_str(resp->clean_decode_path);
+
     if (resp->decode_query_string.size())
-        ss << "?" << resp->decode_query_string;
-    ss << " HTTP/2\" " << resp->resp_status << " " << resp->send_bytes
-        << " \"" << resp->referer << "\" \"" << resp->user_agent << "\" - id=" << resp->id << " \n";
+    {
+        str.cat("?", 1);
+        str.cat(resp->decode_query_string.c_str(), resp->decode_query_string.size());
+    }
+
+    str.cat_str(" HTTP/2\" ");
+    str.cat_int(resp->resp_status);
+    str.cat(" ", 1);
+    str.cat_int(resp->send_bytes);
+    str.cat(" \"", 2);
+    str.cat(resp->referer.c_str(), resp->referer.size());
+    str.cat("\" \"", 3);
+    str.cat(resp->user_agent.c_str(), resp->user_agent.size());
+    str.cat("\" - id=", 7);
+    str.cat_int(resp->id);
+    str.cat(" \n", 2);
 
 mtxLog.lock();
-    write(flog, ss.c_str(), ss.size());
+    write(flog, str.ptr(), str.size());
     num_log_records++;
     if (num_log_records > 500000)
     {
@@ -207,18 +288,46 @@ void print_log(Connect *c)
         return;
     if (c->Protocol == P_HTTP2)
         return;
+    ByteArray str;
+    str.reserve(1024);
+    if (str.error())
+    {
+        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        return;
+    }
 
-    String ss(320);
+    str.cpy_int(c->numConn);
+    str.cat("/", 1);
+    str.cat_int(c->numReq);
+    str.cat_str(" - ");
+    str.cat_str(c->remoteAddr);
+    str.cat(":", 1);
+    str.cat(c->serv->port.c_str(), c->serv->port.size());
+    str.cat(" - [", 4);
+    str.cat_logtime();
+    str.cat("] \"", 3);
+    str.cat_str(get_str_method(c->h1->resp.httpMethod));
+    str.cat(" ", 1);
+    str.cat_str(c->h1->resp.clean_decode_path);
 
-    ss << c->numConn << "/" << c->numReq << " - " << c->remoteAddr << ":" << c->serv->port << " - [" << log_time()
-        << "] \"" << get_str_method(c->h1->resp.httpMethod) << " " << c->h1->resp.clean_decode_path;
     if (c->h1->resp.decode_query_string.size())
-        ss << "?" << c->h1->resp.decode_query_string;
-    ss << " HTTP/1.1\" " << c->h1->resp.resp_status << " " << c->h1->resp.send_bytes
-        << " \"" << c->h1->resp.referer << "\" \"" << c->h1->resp.user_agent << "\"\n";
+    {
+        str.cat("?", 1);
+        str.cat(c->h1->resp.decode_query_string.c_str(), c->h1->resp.decode_query_string.size());
+    }
+
+    str.cat_str(" HTTP/1.1\" ");
+    str.cat_int(c->h1->resp.resp_status);
+    str.cat(" ", 1);
+    str.cat_int(c->h1->resp.send_bytes);
+    str.cat(" \"", 2);
+    str.cat(c->h1->resp.referer.c_str(), c->h1->resp.referer.size());
+    str.cat("\" \"", 3);
+    str.cat(c->h1->resp.user_agent.c_str(), c->h1->resp.user_agent.size());
+    str.cat("\"\n", 2);
 
 mtxLog.lock();
-    write(flog, ss.c_str(), ss.size());
+    write(flog, str.ptr(), str.size());
     num_log_records++;
     if (num_log_records > 500000)
     {

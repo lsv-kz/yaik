@@ -444,7 +444,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                 if ((!resp->send_headers) && (!resp->create_headers))
                 {
                     const char *p1 = resp->buf.ptr(), *p = NULL;
-                    for (int i = 0; i < resp->buf.size(); ++i)
+                    for (unsigned int i = 0; i < resp->buf.size(); ++i)
                     {
                         if (*(p1++) == '\n')
                         {

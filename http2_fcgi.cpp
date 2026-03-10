@@ -467,7 +467,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         }
 
         char buf[16384];
-        int rd = (resp->cgi.fcgiContentLen > conf->HTTP2_DataBufSize) ? conf->HTTP2_DataBufSize : resp->cgi.fcgiContentLen;
+        int rd = (resp->cgi.fcgiContentLen > (long long)conf->HTTP2_DataBufSize) ? conf->HTTP2_DataBufSize : resp->cgi.fcgiContentLen;
         int ret = read(fd, buf, rd);
         if (ret > 0)
         {
@@ -515,7 +515,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
 void EventHandlerClass::fcgi_get_headers(Connect* c, Stream *resp)
 {
     const char *p1 = resp->buf.ptr(), *p = NULL;
-    for (int i = 0; i < resp->buf.size(); ++i)
+    for (unsigned int i = 0; i < resp->buf.size(); ++i)
     {
         if (*(p1++) == '\n')
         {

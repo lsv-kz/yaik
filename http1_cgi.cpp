@@ -395,7 +395,8 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
             }
             else
             {
-                c->h1->hdrs << s << "\r\n";
+                c->h1->hdrs.cat_str(s);
+                c->h1->hdrs.cat("\r\n", 2);
             }
 
             header_len = -1;

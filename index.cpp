@@ -72,13 +72,19 @@ bool cmp(const string &a, const string &b)
     return i;
 }
 //======================================================================
-void create_index_html(Connect *r, vector<string>& list, int numFiles, string& path, const char *uri, ByteArray *html)
+int create_index_html(Connect *r, vector<string>& list, int num_files, const char *dir_path, const char *uri, ByteArray *html)
 {
-    const int len_path = path.size();
     int n, i;
-    long long size;
     struct stat st;
+    int dir_path_len = strlen(dir_path);
+    char *file_path = (char*)malloc(dir_path_len + NAME_MAX + 1);
+    if (file_path == NULL)
+    {
+        print_err(r, "<%s:%d>  Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        return -RS500;
+    }
 
+    memcpy(file_path, dir_path, dir_path_len);
     //------------------------------------------------------------------
     html->cpy_str("<!DOCTYPE HTML>\r\n"
             "<html>\r\n"
@@ -106,12 +112,11 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
     else
         html->cat_str("   <tr><td><a href=\"../\">Parent Directory/</a></td></tr>\r\n");
     //-------------------------- Directories ---------------------------
-    for (i = 0; (i < numFiles); i++)
+    for (i = 0; i < num_files; i++)
     {
         char buf[1024];
-        path += list[i];
-        n = lstat(path.c_str(), &st);
-        path.resize(len_path);
+        memcpy(file_path + dir_path_len, list[i].c_str(), list[i].size() + 1);
+        n = lstat(file_path, &st);
         if ((n == -1) || !S_ISDIR (st.st_mode))
             continue;
 
@@ -131,12 +136,11 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
     html->cat_str("  </table>\r\n   <hr>\r\n  <table border=\"0\" width=\"100\%\">\r\n"
                 "   <tr><td><h3>Files</h3></td><td></td></tr>\r\n");
     //---------------------------- Files -------------------------------
-    for (i = 0; i < numFiles; i++)
+    for (i = 0; i < num_files; i++)
     {
         char buf[1024];
-        path += list[i];
-        n = lstat(path.c_str(), &st);
-        path.resize(len_path);
+        memcpy(file_path + dir_path_len, list[i].c_str(), list[i].size() + 1);
+        n = lstat(file_path, &st);
         if ((n == -1) || !S_ISREG (st.st_mode))
             continue;
         else if (!strcmp(list[i].c_str(), "favicon.ico"))
@@ -148,10 +152,6 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
             continue;
         }
 
-        size = (long long)st.st_size;
-        char size_s[32];
-        snprintf(size_s, sizeof(size_s), "%lld", size);
-
         if (isimage(list[i].c_str()) && conf->ShowMediaFiles)
         {
             html->cat_str("   <tr><td><a href=\"");
@@ -161,7 +161,7 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
             html->cat_str("\" width=\"100\"></a>");
             html->cat_str(list[i].c_str());
             html->cat_str("</td><td align=\"right\">");
-            html->cat_str(size_s);
+            html->cat_int(st.st_size);
             html->cat_str(" bytes</td></tr>\r\n");
         }
         else if (isaudio(list[i].c_str()) && conf->ShowMediaFiles)
@@ -173,7 +173,7 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
             html->cat_str("\">");
             html->cat_str(list[i].c_str());
             html->cat_str("</a></td><td align=\"right\">");
-            html->cat_str(size_s);
+            html->cat_int(st.st_size);
             html->cat_str(" bytes</td></tr>\r\n");
         }
         else if (isvideo(list[i].c_str()) && conf->ShowMediaFiles)
@@ -186,7 +186,7 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
             html->cat_str("\">");
             html->cat_str(list[i].c_str());
             html->cat_str("</a></td><td align=\"right\">");
-            html->cat_str(size_s);
+            html->cat_int(st.st_size);
             html->cat_str(" bytes</td></tr>\r\n");
         }
         else
@@ -196,14 +196,14 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
             html->cat_str("\">");
             html->cat_str(list[i].c_str());
             html->cat_str("</a></td><td align=\"right\">");
-            html->cat_str(size_s);
+            html->cat_int(st.st_size);
             html->cat_str(" bytes</td></tr>\r\n");
         }
     }
     //------------------------------------------------------------------
     html->cat_str("  </table>\r\n"
               "  <hr>\r\n  ");
-    html->cat_str(get_time().c_str());
+    html->cat_time();
     html->cat_str("\r\n"
               "  <a href=\"#top\" style=\"display:block;\r\n"
               "         position:fixed;\r\n"
@@ -218,47 +218,48 @@ void create_index_html(Connect *r, vector<string>& list, int numFiles, string& p
               "         opacity: 0.7\">^</a>\r\n"
               " </body>\r\n"
               "</html>");
+    free(file_path);
+    return 0;
 }
 //======================================================================
-int index_dir(Connect *r, string& path, const char *uri, ByteArray *html)
+int index_dir(Connect *r, const char *dir_path, const char *uri, ByteArray *html)
 {
     DIR *dir;
     struct dirent *dirbuf;
-    const int maxNumFiles = 1024;
-    int numFiles = 0;
+    const int max_num_files = 1024;
+    int num_files = 0;
+
+    if (dir_path == NULL)
+    {
+        print_err(r, "<%s:%d>  Error dir_path = NULL\n", __func__, __LINE__);
+        return -RS500;
+    }
 
     vector<string> list;
-    list.reserve(maxNumFiles);
+    list.reserve(max_num_files);
 
-    dir = opendir(path.c_str());
+    dir = opendir(dir_path);
     if (dir == NULL)
     {
         if (errno == EACCES)
             return -RS403;
         else
         {
-            print_err(r, "<%s:%d>  Error opendir(\"%s\"): %s\n", __func__, __LINE__, path.c_str(), strerror(errno));
+            print_err(r, "<%s:%d>  Error opendir(\"%s\"): %s\n", __func__, __LINE__, dir_path, strerror(errno));
             return -RS500;
         }
     }
 
     while ((dirbuf = readdir(dir)))
     {
-        if (numFiles >= maxNumFiles )
-        {
-            print_err(r, "<%s:%d> number of files per directory >= %d\n", __func__, __LINE__, numFiles);
-            break;
-        }
-
         if (dirbuf->d_name[0] == '.')
             continue;
         list.push_back(dirbuf->d_name);
-        ++numFiles;
+        ++num_files;
     }
 
     closedir(dir);
     sort(list.begin(), list.end(), cmp);
-    create_index_html(r, list, numFiles, path, uri, html);
-
-    return 0;
+    html->reserve(num_files * 100);
+    return create_index_html(r, list, num_files, dir_path, uri, html);
 }

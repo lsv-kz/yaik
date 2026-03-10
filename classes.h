@@ -163,8 +163,8 @@ public:
     int ListenBacklog;
     bool TcpNoDelay;
 
-    int HTTP1_DataBufSize;
-    int HTTP2_DataBufSize;
+    unsigned int HTTP1_DataBufSize;
+    unsigned int HTTP2_DataBufSize;
 
     int MaxAcceptConnections;
 

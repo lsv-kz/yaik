@@ -202,7 +202,7 @@ int set_frame_data(Connect *c, Stream *resp)
 
         if (resp->buf.size_remain())
         {
-            int len = resp->buf.size_remain();
+            unsigned int len = resp->buf.size_remain();
             if (len > conf->HTTP2_DataBufSize)
                 len = conf->HTTP2_DataBufSize;
             set_frame_data(resp, len, 0);
@@ -526,7 +526,7 @@ int set_response(Connect *c, Stream *resp)
             return 0;
         }
 
-        int err = index_dir(c, path, resp->clean_decode_path, &resp->buf);
+        int err = index_dir(c, path.c_str(), resp->clean_decode_path, &resp->buf);
         if (err)
         {
             print_err(resp, "<%s:%d> Error index_dir(): %d\n", __func__, __LINE__, err);
@@ -718,7 +718,7 @@ int EventHandlerClass::recv_frame_(Connect *c)
     if (c->h2->body_len > 0)
     {
         char buf[16384];
-        int len_rd = (int)sizeof(buf);
+        unsigned int len_rd = sizeof(buf);
         if (c->h2->body_len < len_rd)
             len_rd = c->h2->body_len;
         int ret = read_from_client(c, buf, len_rd);
@@ -757,7 +757,7 @@ int EventHandlerClass::parse_frame(Connect *c)
             hex_print_stderr("recv SETTINGS", __LINE__, c->h2->body.ptr(), c->h2->body.size());
         if (c->h2->body.size())
         {
-            for (int i = 0; i < (c->h2->body.size()/6); ++i)
+            for (unsigned int i = 0; i < (c->h2->body.size()/6); ++i)
             {
                 int ind = i * 6;
                 if (c->h2->body.get_byte(ind + 1) == 1)
@@ -782,7 +782,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                 }
                 else if (c->h2->body.get_byte(ind + 1) == 5)
                 {
-                    int n = (unsigned char)c->h2->body.get_byte(ind + 5);
+                    unsigned int n = (unsigned char)c->h2->body.get_byte(ind + 5);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 4)<<8);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);

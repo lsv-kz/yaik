@@ -115,11 +115,7 @@ int set_response(Connect *c)
     path = c->h1->resp.vhost->DocumentRoot;
     path += c->h1->resp.clean_decode_path;
     struct stat st;
-    int ret;
-    if (path[path.size() - 1] == '/')
-        ret = lstat(path.substr(0, path.size() - 1).c_str(), &st);
-    else
-        ret = lstat(path.c_str(), &st);
+    int ret = lstat(path.c_str(), &st);
     if (ret == -1)
     {
         if (errno == EACCES)
@@ -148,13 +144,13 @@ int set_response(Connect *c)
         {
             c->h1->resp.resp_status = RS301;
             c->h1->resp.path.insert(path_len, "/");
-            c->h1->hdrs = "Location: ";
-            c->h1->hdrs += c->h1->resp.path.c_str();
-            c->h1->hdrs += "\r\n";
+            c->h1->hdrs.cpy_str("Location: ");
+            c->h1->hdrs.cat(c->h1->resp.path.c_str(), c->h1->resp.path.size());
+            c->h1->hdrs.cat("\r\n", 2);
             return send_message(c, "301 Moved Permanently");
         }
 
-        int ret = index_dir(c, path, c->h1->resp.clean_decode_path, &c->h1->resp.send_data);
+        int ret = index_dir(c, path.c_str(), c->h1->resp.clean_decode_path, &c->h1->resp.send_data);
         if (ret < 0)
         {
             return ret;
@@ -526,7 +522,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
                 c->h1->connKeepAlive = false;
             c->h1->resp.resp_status = -c->err;
             c->err = 0;
-            c->h1->hdrs.clear();
+            c->h1->hdrs.init();
             if (send_message(c, NULL) == 0)
                 return;
         }
@@ -840,8 +836,8 @@ int create_response_headers(Connect *c)
 
     if (c->h1->hdrs.size())
     {
-        headers << c->h1->hdrs.c_str();
-        c->h1->hdrs = "";
+        headers << c->h1->hdrs.ptr();
+        c->h1->hdrs.init();
     }
 
     headers << "\r\n";

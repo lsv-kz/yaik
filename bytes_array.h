@@ -4,22 +4,85 @@
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
+#include <sys/time.h>
+
 //======================================================================
 class ByteArray
 {
+    char int_buf[21];
     char *buf;
-    int buf_size;
-    int buf_len;
-    int offset;
+    unsigned int buf_size;
+    unsigned int buf_len;
+    unsigned int offset;
+    int err;
     //------------------------------------------------------------------
-    int resize(int size_new)
+    char *ll_to_string(long long ll)
     {
-        if ((buf_size >= size_new) ||(size_new <= 0))
+        if (err)
+            return NULL;
+        int cnt = 20, minus = (ll < 0) ? 1 : 0;
+        const char *get_char = "9876543210123456789";
+    
+        int_buf[cnt] = 0;
+        while ((cnt > 0) && (ll != 0))
+        {
+            int_buf[--cnt] = get_char[9 + ll % 10];
+            ll /= 10;
+        }
+    
+        if ((minus) && (cnt > 0))
+            int_buf[--cnt] = '-';
+    
+        return int_buf + cnt;
+    }
+    //------------------------------------------------------------------
+    ByteArray(const ByteArray&);
+    ByteArray& operator=(const ByteArray&);
+
+public:
+
+    ByteArray()
+    {
+        buf = NULL;
+        buf_size = buf_len = 0;
+        offset = 0;
+        err = 0;
+    }
+    //------------------------------------------------------------------
+    ~ByteArray()
+    {
+        if (buf)
+        {
+            delete [] buf;
+            buf = NULL;
+        }
+    }
+    //------------------------------------------------------------------
+    void init()
+    {
+        buf_len = 0;
+        offset = 0;
+        err = 0;
+    }
+    //------------------------------------------------------------------
+    int reserve(unsigned int size_new)
+    {
+        if (err)
             return -1;
+        if (size_new > 10000000)
+        {
+            fprintf(stderr, "<%s:%d> Error new size %u\n", __func__, __LINE__, size_new);
+            err = -1;
+            return -1;
+        }
+        if (buf_size >= size_new)
+            return buf_size;
+        size_new += size_new/4;
         char *tmp_buf = new(std::nothrow) char [size_new];
         if (!tmp_buf)
         {
             fprintf(stderr, "<%s:%d> Error new char [%d]\n", __func__, __LINE__, size_new);
+            err = -1;
             return -1;
         }
 
@@ -35,48 +98,18 @@ class ByteArray
 
         return 0;
     }
-
-    ByteArray(const ByteArray&);
-    ByteArray& operator=(const ByteArray&);
-
-public:
-
-    ByteArray()
-    {
-        buf = NULL;
-        buf_size = buf_len = offset = 0;
-    }
     //------------------------------------------------------------------
-    ~ByteArray()
+    int cpy(const char *b, unsigned int len)
     {
-        if (buf)
+        if ((b == NULL) || (len == 0) || err)
         {
-            delete [] buf;
-            buf = NULL;
-        }
-    }
-    //------------------------------------------------------------------
-    void init()
-    {
-        buf_len = offset = 0;
-    }
-    //------------------------------------------------------------------
-    void reserve(unsigned int n)
-    {
-        resize(n);
-    }
-    //------------------------------------------------------------------
-    int cpy(const char *b, int len)
-    {
-        if (len <= 0)
-        {
-            fprintf(stderr, "<%s:%d> len=%d\n", __func__, __LINE__, len);
+            fprintf(stderr, "<%s:%d> %p, len=%d, error=%d\n", __func__, __LINE__, b, len, err);
             return -1;
         }
 
         if (buf_size <= len)
         {
-            if (resize(len + 64))
+            if (reserve(len + 1))
                 return -1;
         }
 
@@ -87,18 +120,18 @@ public:
         return 0;
     }
     //------------------------------------------------------------------
-    int cat(const char *b, int len)
+    int cat(const char *b, unsigned int len)
     {
-        if (len <= 0)
+        if ((b == NULL) || (len == 0) || err)
         {
-            fprintf(stderr, "<%s:%d> len=%d\n", __func__, __LINE__, len);
+            fprintf(stderr, "<%s:%d> %p, len=%d, error=%d\n", __func__, __LINE__, b, len, err);
             return -1;
         }
 
         if (buf_size <= (buf_len + len))
         {
-            if (resize(buf_len + len + 64))
-                    return -1;
+            if (reserve(buf_len + len + 1))
+                return -1;
         }
 
         memcpy(buf + buf_len, b, len);
@@ -109,10 +142,12 @@ public:
     //------------------------------------------------------------------
     int cat(const char b)
     {
+        if (err)
+            return -1;
         if (buf_size <= (buf_len + 1))
         {
-            if (resize(buf_len + 64))
-                    return -1;
+            if (reserve(buf_len + 2))
+                return -1;
         }
 
         buf[buf_len] = b;
@@ -121,9 +156,15 @@ public:
         return 0;
     }
     //------------------------------------------------------------------
+    int cpy_int(long long ll) { return cpy_str(ll_to_string(ll)); }
+    //------------------------------------------------------------------
+    int cat_int(long long ll) { return cat_str(ll_to_string(ll)); }
+    //------------------------------------------------------------------
     int cpy_str(const char *s)
     {
-        int len = (int)strlen(s);
+        if ((s == NULL) || err)
+            return -1;
+        unsigned int len = strlen(s);
         if (len)
             return cpy(s, len);
         else
@@ -136,13 +177,39 @@ public:
     //------------------------------------------------------------------
     int cat_str(const char *s)
     {
-        int len = (int)strlen(s);
+        if ((s == NULL) || err)
+            return -1;
+        unsigned int len = strlen(s);
         if (len)
             return cat(s, len);
         else
-        {
             return 0;
-        }
+    }
+    //------------------------------------------------------------------
+    void cat_time()
+    {
+        if (err)
+            return;
+        struct tm t;
+        char s[40];
+        time_t now = time(NULL);
+    
+        gmtime_r(&now, &t);
+        unsigned int len = strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %Z", &t);
+        cat(s, len);
+    }
+    //------------------------------------------------------------------
+    void cat_logtime()
+    {
+        if (err)
+            return;
+        struct tm t;
+        char s[40];
+        time_t now = time(NULL);
+    
+        localtime_r(&now, &t);
+        unsigned int len = strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S %Z", &t);
+        cat(s, len);
     }
     //------------------------------------------------------------------
     const char *ptr()
@@ -167,21 +234,21 @@ public:
             return "";
     }
     //------------------------------------------------------------------
-    int set_len(int n)
+    int set_len(unsigned int n)
     {
-        if ((n < 0) || (buf_len >= buf_size))
+        if (n >= buf_size)
             return buf_len;
         buf_len = n;
         return buf_len;
     }
     //------------------------------------------------------------------
-    int read_file(int fd, int len)
+    int read_file(int fd, unsigned int len)
     {
-        if (len < 0)
+        if ((len == 0) || err)
             return -1;
         if (buf_size <= len)
         {
-            if (resize(len + 64))
+            if (reserve(len + 1))
                 return -1;
         }
 
@@ -197,16 +264,16 @@ public:
         return ret;
     }
     //------------------------------------------------------------------
-    int get_byte(int i)
+    int get_byte(unsigned int i)
     {
-        if ((i >= buf_len) || (i < 0))
+        if ((i >= buf_len) || err)
             return -1;
         return (unsigned char)buf[i];
     }
     //------------------------------------------------------------------
-    int set_byte(char ch, int i)
+    int set_byte(char ch, unsigned int i)
     {
-        if ((i < 0) || (i >= buf_len) || (buf_size == 0))
+        if ((i >= buf_len) || (buf_size == 0) || err)
             return -1;
         else
         {
@@ -215,20 +282,22 @@ public:
         }
     }
     //------------------------------------------------------------------
-    int size() { return buf_len; }
-    int size_remain() { return buf_len - offset; }
-    int get_offset() { return offset; }
+    unsigned int size() { return buf_len; }
+    unsigned int capacity() { return buf_size; }
+    unsigned int size_remain() { return buf_len - offset; }
+    unsigned int get_offset() { return offset; }
+    int error() { return err; }
 
-    int set_offset(int n)
+    unsigned int set_offset(unsigned int n)
     {
-        if (((offset + n) < 0) || ((offset + n) > buf_len))
+        if ((offset + n) > buf_len)
         {
-            fprintf(stderr, "<%s:%d> Error new offset=%d, buf_len=%d\n", __func__, __LINE__, offset + n, buf_len);
-            return -1;
+            fprintf(stderr, "<%s:%d> Error new offset=%u, buf_len=%u\n", __func__, __LINE__, offset + n, buf_len);
+            return 0;
         }
         else if (n == 0)
         {
-            fprintf(stderr, "<%s:%d> n=%d\n", __func__, __LINE__, n);
+            fprintf(stderr, "<%s:%d> n=%u\n", __func__, __LINE__, n);
             return offset;
         }
 

@@ -116,7 +116,7 @@ struct http2
     FrameRedySend *start_list_send_frame;
     FrameRedySend *end_list_send_frame;
     //-----------------------
-    int body_len;
+    unsigned int body_len;
     FRAME_TYPE type;
     int flags;
     int id;
@@ -208,7 +208,7 @@ struct http1
     } con_status;
 
     Stream resp;
-    String hdrs;
+    ByteArray hdrs;
     CHUNK_MODE chunk_mode;
     bool connKeepAlive;
     bool try_again;
@@ -216,7 +216,7 @@ struct http1
     http1()
     {
         connKeepAlive = true;
-        hdrs.clear();
+        hdrs.init();
         chunk_mode = NO_CHUNK;
         try_again = false;
     }
@@ -225,7 +225,7 @@ struct http1
     {
         resp.init();
         //----------------------
-        hdrs.clear();
+        hdrs.init();
         chunk_mode = NO_CHUNK;
     }
     //------------------------------------------------------------------
@@ -438,7 +438,7 @@ int set_max_fd(int max_open_fd);
 void free_fcgi_list();
 void setDataBufSize(int n);
 //------------------------- index_dir.cpp ------------------------------
-int index_dir(Connect *c, std::string& path, const char *uri, ByteArray *b);
+int index_dir(Connect *c, const char *dir_path, const char *uri, ByteArray *b);
 //----------------------- percent_coding.cpp----------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, std::string& s_out);
