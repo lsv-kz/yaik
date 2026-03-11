@@ -7,7 +7,7 @@ CC = c++
 OBJSDIR = objs
 #$(shell mkdir -p $(OBJSDIR))
 
-DEPS = main.h string__.h classes.h bytes_array.h
+DEPS = main.h classes.h bytes_array.h
 
 OBJS = $(OBJSDIR)/yaik.o \
 	$(OBJSDIR)/huffman_code.o \

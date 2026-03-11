@@ -279,7 +279,7 @@ int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                 resp->cgi.buf_param.init();
                 if (resp->httpMethod == M_POST)
                 {
-                    if(resp->post_content_len <= 0)
+                    if ((resp->post_content_len <= 0) && (resp->post_data.size() == 0))
                         resp->cgi_status = CGI_STDOUT;
                     else
                         resp->cgi_status = CGI_STDIN;

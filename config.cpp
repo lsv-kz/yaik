@@ -99,17 +99,24 @@ void create_conf_file(const char *path)
 static int line_ = 1, line_inc = 0;
 static char bracket = 0;
 //----------------------------------------------------------------------
-int getLine(FILE *f, String &ss)
+int getLine(FILE *f, char *str, int size)
 {
-    ss.clear();
+    if ((str == NULL) || (size == 0))
+    {
+        return -1;
+    }
+
+    int offset = 0;
+    str[offset] = 0;
+
     if (bracket)
     {
-        ss << bracket;
+        str[offset++] = bracket;
+        str[offset] = 0;
         bracket = 0;
         return 1;
     }
 
-    ss = "";
     int ch, len = 0, numWords = 0, wr = 1, wrSpace = 0;
 
     if (line_inc)
@@ -131,7 +138,8 @@ int getLine(FILE *f, String &ss)
             {
                 ++line_;
                 wr = 1;
-                ss = "";
+                offset = 0;
+                str[offset] = 0;
                 wrSpace = 0;
                 continue;
             }
@@ -151,7 +159,8 @@ int getLine(FILE *f, String &ss)
                 bracket = (char)ch;
             else
             {
-                ss << (char)ch;
+                str[offset++] = (char)ch;
+                str[offset] = 0;
                 ++len;
             }
             return ++numWords;
@@ -160,13 +169,15 @@ int getLine(FILE *f, String &ss)
         {
             if (wrSpace)
             {
-                ss << " ";
+                str[offset++] = ' ';
+                str[offset] = 0;
                 ++len;
                 ++numWords;
                 wrSpace = 0;
             }
 
-            ss << (char)ch;
+            str[offset++] = (char)ch;
+            str[offset] = 0;
             ++len;
         }
     }
@@ -227,7 +238,7 @@ int find_bracket(FILE *f, char c)
     return 0;
 }
 //======================================================================
-void create_fcgi_list(fcgi_list_addr **l, const string &s1, const string &s2, CGI_TYPE type)
+void create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2, CGI_TYPE type)
 {
     if (l == NULL)
     {
@@ -242,7 +253,7 @@ void create_fcgi_list(fcgi_list_addr **l, const string &s1, const string &s2, CG
     }
     catch (...)
     {
-        fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        fprintf(stderr, "<%s:%d> Error new(): %s\n", __func__, __LINE__, strerror(errno));
         exit(errno);
     }
 
@@ -255,134 +266,133 @@ void create_fcgi_list(fcgi_list_addr **l, const string &s1, const string &s2, CG
 //======================================================================
 int read_conf_file(FILE *fconf)
 {
-    String ss;
+    char str[1024];
     bool default_server = true;
     bool SecureConnect = false;
     Server *prev_server = NULL;
 
     int n;
-    while ((n = getLine(fconf, ss)) > 0)
+    while ((n = getLine(fconf, str, sizeof(str) - 1)) > 0)
     {
         if (n == 2)
         {
-            String s1, s2;
-            ss >> s1;
-            ss >> s2;
-
-            if (s1 == "PrintDebugMsg")
+            char s1[512], s2[512];
+            if (sscanf(str, "%s %s", s1, s2) != 2)
             {
-                if (!strcmp_case(s2.c_str(), "on"))
+                fprintf(stderr, "<%s:%d> Error sscanf(%s) != 2\n", __func__, __LINE__, str);
+                return -1;
+            }
+
+            if (!strcmp(s1, "PrintDebugMsg"))
+            {
+                if (!strcmp_case(s2, "on"))
                     c.PrintDebugMsg = true;
-                else if (!strcmp_case(s2.c_str(), "off"))
+                else if (!strcmp_case(s2, "off"))
                     c.PrintDebugMsg = false;
                 else
                 {
                     fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
-                            __func__, __LINE__, line_, ss.c_str());
+                            __func__, __LINE__, line_, str);
                     return -1;
                 }
             }
-            else if (s1 == "ServerSoftware")
-                s2 >> c.ServerSoftware;
-            else if ((s1 == "HeaderTableSize") && is_number(s2.c_str()))
-                s2 >> c.HeaderTableSize;
-            else if ((s1 == "MaxConcurrentStreams") && is_number(s2.c_str()))
-                s2 >> c.MaxConcurrentStreams;
-            else if (s1 == "TcpNoDelay")
+            else if (!strcmp(s1, "ServerSoftware"))
+                c.ServerSoftware = s2;
+            else if ((!strcmp(s1, "HeaderTableSize")) && is_number(s2))
+                c.HeaderTableSize = atoi(s2);
+            else if ((!strcmp(s1, "MaxConcurrentStreams")) && is_number(s2))
+                c.MaxConcurrentStreams = atoi(s2);
+            else if (!strcmp(s1, "TcpNoDelay"))
             {
-                if (!strcmp_case(s2.c_str(), "on"))
+                if (!strcmp_case(s2, "on"))
                     c.TcpNoDelay = true;
-                else if (!strcmp_case(s2.c_str(), "off"))
+                else if (!strcmp_case(s2, "off"))
                     c.TcpNoDelay = false;
                 else
                 {
                     fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
-                            __func__, __LINE__, line_, ss.c_str());
+                            __func__, __LINE__, line_, str);
                     return -1;
                 }
             }
-            else if ((s1 == "ListenBacklog") && is_number(s2.c_str()))
-                s2 >> c.ListenBacklog;
-            else if ((s1 == "HTTP1_DataBufSize") && is_number(s2.c_str()))
+            else if ((!strcmp(s1, "ListenBacklog")) && is_number(s2))
+                c.ListenBacklog = atoi(s2);
+            else if ((!strcmp(s1, "HTTP1_DataBufSize")) && is_number(s2))
+                c.HTTP1_DataBufSize = atoi(s2);
+            else if ((!strcmp(s1, "HTTP2_DataBufSize")) && is_number(s2))
             {
-                s2 >> c.HTTP1_DataBufSize;
-            }
-            else if ((s1 == "HTTP2_DataBufSize") && is_number(s2.c_str()))
-            {
-                s2 >> c.HTTP2_DataBufSize;
+                c.HTTP2_DataBufSize = atoi(s2);
                 if ((c.HTTP2_DataBufSize <= 0) || (c.HTTP2_DataBufSize > 16384))
                 {
-                    fprintf(stderr, "<%s:%d> Error read config file: HTTP2_DataBufSize > 16384, [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                    fprintf(stderr, "<%s:%d> Error read config file: HTTP2_DataBufSize > 16384, [%s], line <%d>\n", __func__, __LINE__, str, line_);
                     return -1;
                 }
 
                 if (c.HTTP2_DataBufSize > 16375)
                     c.HTTP2_DataBufSize = 16375;
             }
-            else if ((s1 == "MaxAcceptConnections") && is_number(s2.c_str()))
-                s2 >> c.MaxAcceptConnections;
-            else if ((s1 == "MaxRequestsPerClient") && is_number(s2.c_str()))
-                s2 >> c.MaxRequestsPerClient;
-            else if ((s1 == "TimeoutPoll") && is_number(s2.c_str()))
-                s2 >> c.TimeoutPoll;
-            else if (s1 == "DocumentRoot")
-                s2 >> c.DocumentRoot;
-            else if (s1 == "ScriptPath")
-                s2 >> c.ScriptPath;
-            else if (s1 == "LogPath")
-                s2 >> c.LogPath;
-            else if (s1 == "PidFilePath")
-                s2 >> c.PidFilePath;
-            else if ((s1 == "MaxCgiProc") && is_number(s2.c_str()))
-                s2 >> c.MaxCgiProc;
-            else if ((s1 == "Timeout") && is_number(s2.c_str()))
-                s2 >> c.Timeout;
-            else if ((s1 == "TimeoutKeepAlive") && is_number(s2.c_str()))
-                s2 >> c.TimeoutKeepAlive;
-            else if ((s1 == "TimeoutCGI") && is_number(s2.c_str()))
-                s2 >> c.TimeoutCGI;
-            else if (s1 == "UsePHP")
+            else if ((!strcmp(s1, "MaxAcceptConnections")) && is_number(s2))
+                c.MaxAcceptConnections = atoi(s2);
+            else if ((!strcmp(s1, "MaxRequestsPerClient")) && is_number(s2))
+                c.MaxRequestsPerClient = atoi(s2);
+            else if ((!strcmp(s1, "TimeoutPoll")) && is_number(s2))
+                c.TimeoutPoll = atoi(s2);
+            else if (!strcmp(s1, "ScriptPath"))
+                c.ScriptPath = s2;
+            else if (!strcmp(s1, "LogPath"))
+                c.LogPath = s2;
+            else if (!strcmp(s1, "PidFilePath"))
+                c.PidFilePath = s2;
+            else if ((!strcmp(s1, "MaxCgiProc")) && is_number(s2))
+                c.MaxCgiProc = atoi(s2);
+            else if ((!strcmp(s1, "Timeout")) && is_number(s2))
+                c.Timeout = atoi(s2);
+            else if ((!strcmp(s1,"TimeoutKeepAlive")) && is_number(s2))
+                c.TimeoutKeepAlive = atoi(s2);
+            else if ((!strcmp(s1,"TimeoutCGI")) && is_number(s2))
+                c.TimeoutCGI = atoi(s2);
+            else if (!strcmp(s1, "UsePHP"))
             {
-                if ((s2 == "off") || (s2 == "php-fpm") || (s2 == "php-cgi"))
-                    s2 >> c.UsePHP;
+                if ((!strcmp(s2, "off")) || (!strcmp(s2, "php-fpm")) || (!strcmp(s2, "php-cgi")))
+                    c.UsePHP = s2;
                 else
                 {
-                    fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                    fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, str, line_);
                     return -1;
                 }
             }
-            else if (s1 == "PathPHP")
-                s2 >> c.PathPHP;
-            else if (s1 == "ShowMediaFiles")
+            else if (!strcmp(s1, "PathPHP"))
+                c.PathPHP = s2;
+            else if (!strcmp(s1, "ShowMediaFiles"))
             {
-                if (!strcmp_case(s2.c_str(), "on"))
+                if (!strcmp_case(s2, "on"))
                     c.ShowMediaFiles = true;
-                else if (!strcmp_case(s2.c_str(), "off"))
+                else if (!strcmp_case(s2, "off"))
                     c.ShowMediaFiles = false;
                 else
                 {
                     fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
-                            __func__, __LINE__, line_, ss.c_str());
+                            __func__, __LINE__, line_, str);
                     return -1;
                 }
             }
-            else if ((s1 == "ClientMaxBodySize") && is_number(s2.c_str()))
-                s2 >> c.ClientMaxBodySize;
-            else if (s1 == "User")
-                s2 >> c.user;
-            else if (s1 == "Group")
-                s2 >> c.group;
+            else if ((!strcmp(s1, "ClientMaxBodySize")) && is_number(s2))
+                c.ClientMaxBodySize = atoi(s2);
+            else if (!strcmp(s1, "User"))
+                c.user = s2;
+            else if (!strcmp(s1, "Group"))
+                c.group = s2;
             else
             {
-                fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, str, line_);
                 return -1;
             }
         }
         else if (n == 1)
         {
-            if (ss == "ServerSoftware")
+            if (!strcmp(str, "ServerSoftware"))
                 c.ServerSoftware = "";
-            else if (ss == "server")
+            else if (!strcmp(str, "server"))
             {
                 if (find_bracket(fconf, '{') == 0)
                 {
@@ -400,21 +410,24 @@ int read_conf_file(FILE *fconf)
                 }
 
                 VHost *default_vhost = NULL, *prev_vhost = NULL;
-                while ((n = getLine(fconf, ss)) > 0)
+                while ((n = getLine(fconf, str, sizeof(str) - 1)) > 0)
                 {
                     if (n == 2)
                     {
-                        String s1, s2;
-                        ss >> s1;
-                        ss >> s2;
-
-                        if (s1 == "ip")
-                            s2 >> serv->ip;
-                        else if ((s1 == "ServerPort") && is_number(s2.c_str()))
-                            s2 >> serv->port;
-                        else if (s1 == "SecureConnect")
+                        char s1[512], s2[512];
+                        if (sscanf(str, "%s %s", s1, s2) != 2)
                         {
-                            if (!strcmp_case(s2.c_str(), "on"))
+                            fprintf(stderr, "<%s:%d> Error sscanf(%s) != 2\n", __func__, __LINE__, str);
+                            return -1;
+                        }
+
+                        if (!strcmp(s1, "ip"))
+                            serv->ip = s2;
+                        else if ((!strcmp(s1, "ServerPort")) && is_number(s2))
+                            serv->port = s2;
+                        else if (!strcmp(s1, "SecureConnect"))
+                        {
+                            if (!strcmp_case(s2, "on"))
                             {
                                 serv->SecureConnect = true;
                                 if (SecureConnect == false)
@@ -423,41 +436,39 @@ int read_conf_file(FILE *fconf)
                                     SecureConnect = true;
                                 }
                             }
-                            else if (!strcmp_case(s2.c_str(), "off"))
+                            else if (!strcmp_case(s2, "off"))
                                 serv->SecureConnect = false;
                             else
                             {
                                 fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
-                                        __func__, __LINE__, line_, ss.c_str());
+                                        __func__, __LINE__, line_, str);
                                 return -1;
                             }
                         }
-                        else if (s1 == "EnableHTTP2")
+                        else if (!strcmp(s1, "EnableHTTP2"))
                         {
-                            if (!strcmp_case(s2.c_str(), "on"))
+                            if (!strcmp_case(s2, "on"))
                                 serv->EnableHTTP2 = true;
-                            else if (!strcmp_case(s2.c_str(), "off"))
+                            else if (!strcmp_case(s2, "off"))
                                 serv->EnableHTTP2 = false;
                             else
                             {
                                 fprintf(stderr, "<%s:%d> Error config file line <%d> \"%s\": [on | off]\n",
-                                        __func__, __LINE__, line_, ss.c_str());
+                                        __func__, __LINE__, line_, str);
                                 return -1;
                             }
                         }
-                        else if (s1 == "Redirect")
-                        {
-                            s2 >> serv->redirect;
-                        }
+                        else if (!strcmp(s1, "Redirect"))
+                            serv->redirect = s2;
                         else
                         {
-                            fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                            fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, str, line_);
                             return -1;
                         }
                     }
                     else if (n == 1)
                     {
-                        if (ss == "vhost")
+                        if (!strcmp(str, "vhost"))
                         {
                             VHost *vhost;
                             try
@@ -466,7 +477,7 @@ int read_conf_file(FILE *fconf)
                             }
                             catch (...)
                             {
-                                fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                                fprintf(stderr, "<%s:%d> Error new(): %s\n", __func__, __LINE__, strerror(errno));
                                 exit(errno);
                             }
 
@@ -486,62 +497,65 @@ int read_conf_file(FILE *fconf)
                                 return -1;
                             }
 
-                            while (getLine(fconf, ss) == 2)
+                            while (getLine(fconf, str, sizeof(str) - 1) == 2)
                             {
-                                String s1, s2;
-                                ss >> s1;
-                                ss >> s2;
-
-                                if (s1 == "HostName")
-                                    s2 >> vhost->hostname;
-                                else if (s1 == "DocumentRoot")
+                                char s1[512], s2[512];
+                                if (sscanf(str, "%s %s", s1, s2) != 2)
                                 {
-                                    s2 >> vhost->DocumentRoot;
+                                    fprintf(stderr, "<%s:%d> Error sscanf(%s) != 2\n", __func__, __LINE__, str);
+                                    return -1;
+                                }
+
+                                if (!strcmp(s1, "HostName"))
+                                    vhost->hostname = s2;
+                                else if (!strcmp(s1, "DocumentRoot"))
+                                {
+                                    vhost->DocumentRoot = s2;
                                     if (default_server)
                                     {
                                         c.DocumentRoot = vhost->DocumentRoot;
                                         default_server = false;
                                     }
                                 }
-                                else if (s1 == "Certificate")
-                                    s2 >> vhost->Certificate;
-                                else if (s1 == "CertificateKey")
-                                    s2 >> vhost->CertificateKey;
+                                else if (!strcmp(s1, "Certificate"))
+                                    vhost->Certificate = s2;
+                                else if (!strcmp(s1, "CertificateKey"))
+                                    vhost->CertificateKey = s2;
                                 else
                                 {
-                                    fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                                    fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, str, line_);
                                     return -1;
                                 }
                             }
 
-                            if (ss != "}")
+                            if (strcmp(str, "}"))
                             {
                                 fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                                 return -1;
                             }
                         }
-                        else if (ss == "}")
+                        else if (!strcmp(str, "}"))
                             break;
                         else
                         {
-                            fprintf(stderr, "<%s:%d> Error not found \"}\", [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                            fprintf(stderr, "<%s:%d> Error not found \"}\", [%s], line <%d>\n", __func__, __LINE__, str, line_);
                             return -1;
                         }
                     }
                     else
                     {
-                        fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                        fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, str, line_);
                         return -1;
                     }
                 }
 
-                /*if (ss != "}")
+                /*if (strcmp(str, "}"))
                 {
                     fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                     return -1;
                 }*/
             }
-            else if (ss == "fastcgi")
+            else if (!strcmp(str, "fastcgi"))
             {
                 if (find_bracket(fconf, '{') == 0)
                 {
@@ -549,22 +563,24 @@ int read_conf_file(FILE *fconf)
                     return -1;
                 }
 
-                while (getLine(fconf, ss) == 2)
+                while (getLine(fconf, str, sizeof(str) - 1) == 2)
                 {
-                    string s1, s2;
-                    ss >> s1;
-                    ss >> s2;
-
+                    char s1[512], s2[512];
+                    if (sscanf(str, "%s %s", s1, s2) != 2)
+                    {
+                        fprintf(stderr, "<%s:%d> Error sscanf(%s) != 2\n", __func__, __LINE__, str);
+                        return -1;
+                    }
                     create_fcgi_list(&c.fcgi_list, s1, s2, FASTCGI);
                 }
 
-                if (ss != "}")
+                if (strcmp(str, "}"))
                 {
                     fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                     return -1;
                 }
             }
-            else if (ss == "scgi")
+            else if (!strcmp(str, "scgi"))
             {
                 if (find_bracket(fconf, '{') == 0)
                 {
@@ -572,16 +588,18 @@ int read_conf_file(FILE *fconf)
                     return -1;
                 }
 
-                while (getLine(fconf, ss) == 2)
+                while (getLine(fconf, str, sizeof(str) - 1) == 2)
                 {
-                    string s1, s2;
-                    ss >> s1;
-                    ss >> s2;
-
+                    char s1[512], s2[512];
+                    if (sscanf(str, "%s %s", s1, s2) != 2)
+                    {
+                        fprintf(stderr, "<%s:%d> Error sscanf(%s) != 2\n", __func__, __LINE__, str);
+                        return -1;
+                    }
                     create_fcgi_list(&c.fcgi_list, s1, s2, SCGI);
                 }
 
-                if (ss != "}")
+                if (strcmp(str, "}"))
                 {
                     fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                     return -1;
@@ -589,13 +607,13 @@ int read_conf_file(FILE *fconf)
             }
             else
             {
-                fprintf(stderr, "<%s:%d> Error read config file: [%s] line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                fprintf(stderr, "<%s:%d> Error read config file: [%s] line <%d>\n", __func__, __LINE__, str, line_);
                 return -1;
             }
         }
         else
         {
-            fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+            fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, str, line_);
             return -1;
         }
     }

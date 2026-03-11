@@ -751,13 +751,9 @@ int read_request_headers(Connect *c)
 //======================================================================
 int create_response_headers(Connect *c)
 {
-    c->h1->resp.Time = time(NULL);
-
-    String headers;
-    headers.reserve(512);
-    if (headers.error())
+    if (c->h1->resp.headers.reserve(512) < 0)
     {
-        print_err(c, "<%s:%d> Error create String object\n", __func__, __LINE__);
+        print_err(c, "<%s:%d> Error create ByteArray object\n", __func__, __LINE__);
         return -1;
     }
 
@@ -767,15 +763,24 @@ int create_response_headers(Connect *c)
         c->h1->resp.resp_status = RS500;
     }
 
-    headers << "HTTP/1.1" << " " << http1_status_response(c->h1->resp.resp_status) << "\r\n"
-        << "Date: " << get_time(c->h1->resp.Time) << "\r\n";
+    c->h1->resp.headers.cpy_str("HTTP/1.1 ");
+    c->h1->resp.headers.cat_str(http1_status_response(c->h1->resp.resp_status));
+    c->h1->resp.headers.cat_str("\r\n");
+
+    c->h1->resp.headers.cat_str("Date: ");
+    c->h1->resp.headers.cat_time();
+    c->h1->resp.headers.cat_str("\r\n");
 
     if (conf->ServerSoftware.size())
-        headers << "Server: " << conf->ServerSoftware << "\r\n";
+    {
+        c->h1->resp.headers.cat_str("Server: ");
+        c->h1->resp.headers.cat_str(conf->ServerSoftware.c_str());
+        c->h1->resp.headers.cat_str("\r\n");
+    }
 
     if (c->h1->resp.resp_status == RS204)
     {
-        headers << "Content-Length: 0\r\n";
+        c->h1->resp.headers.cat_str("Content-Length: 0\r\n");
     }
     else
     {
@@ -784,14 +789,24 @@ int create_response_headers(Connect *c)
             if (c->h1->chunk_mode == CHUNK)
             {
                 if ((c->h1->resp.httpMethod == M_GET) || (c->h1->resp.httpMethod == M_POST))
-                    headers << "Transfer-Encoding: chunked\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Transfer-Encoding: chunked\r\n");
+                }
             }
             else
             {
                 if (c->h1->resp.resp_content_type)
-                    headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Content-Type: ");
+                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.cat_str("\r\n");
+                }
                 if (c->h1->resp.resp_content_len >= 0)
-                    headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Content-Length: ");
+                    c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
+                    c->h1->resp.headers.cat_str("\r\n");
+                }
             }
         }
         else
@@ -799,57 +814,87 @@ int create_response_headers(Connect *c)
             if (c->h1->resp.resp_status == RS206)
             {
                 if (c->h1->resp.resp_content_type)
-                    headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
-                headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Content-Type: ");
+                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.cat_str("\r\n");
+                }
 
-                headers << "Content-Range: bytes " << c->h1->resp.offset << "-"
-                                                << (c->h1->resp.offset + c->h1->resp.resp_content_len - 1)
-                                                << "/" << c->h1->resp.file_size << "\r\n";
-                headers << "Accept-Ranges: bytes\r\n";
+                c->h1->resp.headers.cat_str("Content-Length: ");
+                c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
+                c->h1->resp.headers.cat_str("\r\n");
+
+                c->h1->resp.headers.cat_str("Content-Range: bytes ");
+                c->h1->resp.headers.cat_int(c->h1->resp.offset);
+                c->h1->resp.headers.cat_str("-");
+                c->h1->resp.headers.cat_int(c->h1->resp.offset + c->h1->resp.resp_content_len - 1);
+                c->h1->resp.headers.cat_str("/");
+                c->h1->resp.headers.cat_int(c->h1->resp.file_size);
+                c->h1->resp.headers.cat_str("\r\n");
+
+                c->h1->resp.headers.cat_str("Accept-Ranges: bytes\r\n");
             }
             else if (c->h1->resp.resp_status == RS200)
             {
                 if (c->h1->resp.resp_content_type)
-                    headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Content-Type: ");
+                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.cat_str("\r\n");
+                }
 
                 if (c->h1->resp.resp_content_len >= 0)
                 {
-                    headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
-                    headers << "Accept-Ranges: bytes\r\n";
+                    c->h1->resp.headers.cat_str("Content-Length: ");
+                    c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
+                    c->h1->resp.headers.cat_str("\r\n");
+
+                    c->h1->resp.headers.cat_str("Accept-Ranges: bytes\r\n");
                 }
             }
             else if (c->h1->resp.resp_status == RS416)
             {
                 if (c->h1->resp.resp_content_type)
-                    headers << "Content-Type: " << c->h1->resp.resp_content_type << "\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Content-Type: ");
+                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.cat_str("\r\n");
+                }
+
                 if (c->h1->resp.resp_content_len)
-                    headers << "Content-Length: " << c->h1->resp.resp_content_len << "\r\n";
-                headers << "Content-Range: bytes */" << c->h1->resp.file_size << "\r\n";
+                {
+                    c->h1->resp.headers.cat_str("Content-Length: ");
+                    c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
+                    c->h1->resp.headers.cat_str("\r\n");
+                }
+
+                c->h1->resp.headers.cat_str("Content-Range: bytes */");
+                c->h1->resp.headers.cat_int(c->h1->resp.file_size);
+                c->h1->resp.headers.cat_str("\r\n");
             }
         }
     }
 
     if (c->h1->connKeepAlive == false)
-        headers << "Connection: close\r\n";
+        c->h1->resp.headers.cat_str("Connection: close\r\n");
     else
-        headers << "Connection: keep-alive\r\n";
+        c->h1->resp.headers.cat_str("Connection: keep-alive\r\n");
 
     if (c->h1->hdrs.size())
     {
-        headers << c->h1->hdrs.ptr();
+        c->h1->resp.headers.cat(c->h1->hdrs.ptr(), c->h1->hdrs.size());
         c->h1->hdrs.init();
     }
 
-    headers << "\r\n";
+    c->h1->resp.headers.cat_str("\r\n");
 
-    if (headers.error())
+    if (c->h1->resp.headers.error())
     {
         print_err(c, "<%s:%d> Error create response headers\n", __func__, __LINE__);
         c->h1->resp.referer = "Error create response headers";
         return -1;
     }
 
-    c->h1->resp.headers.cpy(headers.c_str(), headers.size());
     return 0;
 }
 //======================================================================
@@ -885,7 +930,7 @@ int send_message(Connect *c, const char *msg)
             c->h1->resp.send_data.cat_str("</p>\r\n");
         }
         c->h1->resp.send_data.cat_str("<hr>\r\n");
-        c->h1->resp.send_data.cat_str(get_time().c_str());
+        c->h1->resp.send_data.cat_time();
         c->h1->resp.send_data.cat_str("\r\n"
                 "</body>\r\n"
                 "</html>");
@@ -919,13 +964,13 @@ int read_post_data(Connect *c)
         return ret;
     }
 
+    c->h1->resp.post_content_len -= ret;
     if ((c->h1->resp.cgi_type == PHPFPM) || (c->h1->resp.cgi_type == FASTCGI))
     {
         char s[8];
         fcgi_set_header(s, FCGI_STDIN, ret);
         c->h1->resp.post_data.cat(s, 8);
         c->h1->resp.post_data.cat(buf, ret);
-        c->h1->resp.post_content_len -= ret;
         if (c->h1->resp.post_content_len <= 0)
         {
             fcgi_set_header(s, FCGI_STDIN, 0);
@@ -935,7 +980,6 @@ int read_post_data(Connect *c)
     else
     {
         c->h1->resp.post_data.cat(buf, ret);
-        c->h1->resp.post_content_len -= ret;
     }
     return ret;
 }

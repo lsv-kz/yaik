@@ -44,7 +44,6 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-#include "string__.h"
 #include "classes.h"
 
 const int  MAX_URI = 2048;
@@ -438,7 +437,7 @@ int set_max_fd(int max_open_fd);
 void free_fcgi_list();
 void setDataBufSize(int n);
 //------------------------- index_dir.cpp ------------------------------
-int index_dir(Connect *c, const char *dir_path, const char *uri, ByteArray *b);
+int index_dir(Connect *c, const char *path, const char *uri, ByteArray *b);
 //----------------------- percent_coding.cpp----------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, std::string& s_out);
