@@ -1100,41 +1100,33 @@ int EventHandlerClass::send_frames_(Connect *c)
             }
         }
 
-        for ( ; resp; resp = c->h2->work_stream)
+        if (resp->frame_win_update.size() || (resp->cgi.window_update > 0))
         {
-            if (resp->frame_win_update.size() || (resp->cgi.window_update > 0))
+            if (resp->cgi.window_update > 32000)
             {
-                if (resp->cgi.window_update > 32000)
-                {
-                    if (conf->PrintDebugMsg)
-                        print_err(resp, "<%s:%d> ??? resp->cgi.window_update(%ld) > 32000\n", __func__, __LINE__, resp->cgi.window_update);
-                }
-
-                if (resp->frame_win_update.size() == 0)
-                    set_frame_window_update(resp, resp->cgi.window_update);
-                int ret = send_window_update(c, resp);
-                if (ret < 0)
-                    return ret;
-            }
-            else
-            {
-                if (resp->headers.size())
-                {
-                    int ret = send_frame_headers(c, resp);
-                    if (ret < 0)
-                        return ret;
-                }
-
-                if (resp->send_headers && (!resp->send_end_stream))
-                {
-                    int ret = send_frame_data(c, resp);
-                    if (ret < 0)
-                        return ret;
-                }
+                if (conf->PrintDebugMsg)
+                    print_err(resp, "<%s:%d> ??? resp->cgi.window_update(%ld) > 32000\n", __func__, __LINE__, resp->cgi.window_update);
             }
 
-            if (c->h2->work_stream)
-                c->h2->work_stream = c->h2->work_stream->next;
+            if (resp->frame_win_update.size() == 0)
+                set_frame_window_update(resp, resp->cgi.window_update);
+            int ret = send_window_update(c, resp);
+            if (ret < 0)
+                return ret;
+        }
+
+        if (resp->headers.size())
+        {
+            int ret = send_frame_headers(c, resp);
+            if (ret < 0)
+                return ret;
+        }
+
+        if (resp->send_headers && (!resp->send_end_stream))
+        {
+            int ret = send_frame_data(c, resp);
+            if (ret < 0)
+                return ret;
         }
     }
     else

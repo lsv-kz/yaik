@@ -316,55 +316,55 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
     else if ((c->h1->con_status == http1::SEND_ENTITY) && (revents & POLLOUT))
     {
         int write_bytes = 0;
-        if (c->h1->resp.send_data.size_remain() == 0)
+        if (c->h1->resp.source_data == FROM_FILE)
         {
-            if (c->h1->resp.resp_content_len <= 0)
+            int data_len = conf->HTTP1_DataBufSize;;
+            if (c->h1->resp.resp_content_len < data_len)
+                data_len = c->h1->resp.resp_content_len;
+            write_bytes = read(c->h1->resp.fd, snd_buf, data_len);
+            if (write_bytes < 0)
             {
-                print_err(c, "<%s:%d> resp_content_len=%lld\n", __func__, __LINE__, c->h1->resp.resp_content_len);
-                http1_end_request(c);
-                return 0;
-            }
-
-            if (c->h1->resp.source_data == FROM_FILE)
-            {
-                int data_len = conf->HTTP1_DataBufSize;;
-                if (c->h1->resp.resp_content_len < data_len)
-                    data_len = c->h1->resp.resp_content_len;
-                write_bytes = c->h1->resp.send_data.read_file(c->h1->resp.fd, data_len);
-                if (write_bytes < 0)
-                {
-                    print_err(c, "<%s:%d> Error read(fd=%d)=%d: %s\n", __func__, __LINE__,
-                                c->h1->resp.fd, write_bytes, strerror(errno));
-                    c->err = -1;
-                    http1_end_request(c);
-                    return -1;
-                }
-
-                if (c->h1->resp.resp_content_len == write_bytes)
-                {
-                    close(c->h1->resp.fd);
-                    c->h1->resp.fd = -1;
-                }
-            }
-            else if (c->h1->resp.source_data == FROM_DATA_BUFFER)
-            {
-                if (c->h1->resp.send_data.size_remain() > conf->HTTP1_DataBufSize)
-                    write_bytes = conf->HTTP1_DataBufSize;
-                else
-                    write_bytes = c->h1->resp.send_data.size_remain();
-            }
-            else
-            {
-                print_err(c, "<%s:%d> Error send_data=0\n", __func__, __LINE__);
+                print_err(c, "<%s:%d> Error read(fd=%d)=%d: %s\n", __func__, __LINE__, 
+                            c->h1->resp.fd, write_bytes, strerror(errno));
                 c->err = -1;
                 http1_end_request(c);
                 return -1;
             }
         }
         else
-            write_bytes = c->h1->resp.send_data.size_remain();
+        {
+            if (c->h1->resp.send_data.size_remain() == 0)
+            {
+                if ((c->h1->resp.source_data == FROM_DATA_BUFFER) ||
+                     (c->h1->resp.source_data == DYN_PAGE)
+                )
+                {
+                    if (c->h1->resp.send_data.size_remain() > conf->HTTP1_DataBufSize)
+                        write_bytes = conf->HTTP1_DataBufSize;
+                    else
+                        write_bytes = c->h1->resp.send_data.size_remain();
+                }
+                else
+                {
+                    print_err(c, "<%s:%d> Error send_data=0\n", __func__, __LINE__);
+                    c->err = -1;
+                    http1_end_request(c);
+                    return -1;
+                }
 
-        int ret = write_to_client(c, c->h1->resp.send_data.ptr_remain(), write_bytes, 0);
+                if (write_bytes <= 0)
+                {
+                    print_err(c, "<%s:%d> write_bytes=%d\n", __func__, __LINE__, write_bytes);
+                    http1_end_request(c);
+                    return 0;
+                }
+            }
+            else
+                write_bytes = c->h1->resp.send_data.size_remain();
+            memcpy(snd_buf, c->h1->resp.send_data.ptr_remain(), write_bytes);
+        }
+
+        int ret = write_to_client(c, snd_buf, write_bytes, 0);
         if (ret < 0)
         {
             if (ret != ERR_TRY_AGAIN)
@@ -375,43 +375,48 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                 http1_end_request(c);
                 return -1;
             }
+
+            if (c->h1->resp.source_data == FROM_FILE)
+            {
+                lseek(c->h1->resp.fd, -write_bytes, SEEK_CUR);
+            }
         }
         else
         {
             c->client_timer = 0;
             c->h1->resp.send_bytes += ret;
-            if (c->h1->resp.source_data != DYN_PAGE)
+            if (c->h1->resp.source_data == FROM_FILE)
+            {
                 c->h1->resp.resp_content_len -= ret;
-            c->h1->resp.send_data.set_offset(ret);
-            if (c->h1->resp.send_data.size_remain())
-            {
-                //print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__,
-                //            ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
-                return 0;
-            }
-
-            c->h1->resp.send_data.init();
-            if (c->h1->resp.source_data == DYN_PAGE)
-            {
-                if (c->h1->resp.cgi.end)
-                {
+                if (ret != write_bytes)
+                    lseek(c->h1->resp.fd, write_bytes - ret, SEEK_CUR);
+                if (c->h1->resp.resp_content_len == 0)
                     http1_end_request(c);
-                }
             }
             else
             {
-                if (c->h1->resp.resp_content_len == 0)
+                if (c->h1->resp.source_data == FROM_DATA_BUFFER)
+                    c->h1->resp.resp_content_len -= ret;
+                c->h1->resp.send_data.set_offset(ret);
+                if (c->h1->resp.send_data.size_remain())
                 {
-                    if (c->h1->resp.source_data == FROM_FILE)
-                    {
-                        if (c->h1->resp.fd > 0)
-                        {
-                            close(c->h1->resp.fd);
-                            c->h1->resp.fd = -1;
-                        }
-                    }
+                    //print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__,
+                    //            ret, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
+                    return 0;
+                }
 
-                    http1_end_request(c);
+                c->h1->resp.send_data.init();
+                if (c->h1->resp.source_data == DYN_PAGE)
+                {
+                    if (c->h1->resp.cgi.end)
+                    {
+                        http1_end_request(c);
+                    }
+                }
+                else if (c->h1->resp.source_data == FROM_DATA_BUFFER)
+                {
+                    if (c->h1->resp.resp_content_len == 0)
+                        http1_end_request(c);
                 }
             }
         }
@@ -497,7 +502,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
     }
     else
     {
-        if ((c->h1->resp.source_data == FROM_FILE) || (c->h1->resp.source_data == MULTIPART_DATA))
+        if (c->h1->resp.source_data == FROM_FILE)
         {
             if (c->h1->resp.fd > 0)
             {

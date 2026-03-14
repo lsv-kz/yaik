@@ -14,6 +14,8 @@ EventHandlerClass::~EventHandlerClass()
         delete [] poll_fd;
     if (cgi_array)
         delete [] cgi_array;
+    if (snd_buf)
+        delete [] snd_buf;
 }
 //======================================================================
 EventHandlerClass::EventHandlerClass()
@@ -24,6 +26,7 @@ EventHandlerClass::EventHandlerClass()
     conn_array = NULL;
     cgi_array = NULL;
     poll_fd = NULL;
+    snd_buf = NULL;
 }
 //======================================================================
 void EventHandlerClass::init()
@@ -31,21 +34,28 @@ void EventHandlerClass::init()
     conn_array = new(nothrow) Connect* [conf->MaxAcceptConnections];
     if (!conn_array)
     {
-        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        print_err("<%s:%d> Error new(): %s\n", __func__, __LINE__, strerror(errno));
         exit(1);
     }
 
     poll_fd = new(nothrow) struct pollfd [conf->MaxAcceptConnections];
     if (!poll_fd)
     {
-        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        print_err("<%s:%d> Error new(): %s\n", __func__, __LINE__, strerror(errno));
         exit(1);
     }
 
     cgi_array = new(nothrow) Stream* [conf->MaxCgiProc];
     if (!cgi_array)
     {
-        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        print_err("<%s:%d> Error new(): %s\n", __func__, __LINE__, strerror(errno));
+        exit(1);
+    }
+
+    snd_buf = new(nothrow) char [conf->HTTP1_DataBufSize];
+    if (snd_buf == NULL)
+    {
+        print_err("<%s:%d> Error new(): %s\n", __func__, __LINE__, strerror(errno));
         exit(1);
     }
 }

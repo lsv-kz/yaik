@@ -330,6 +330,8 @@ class EventHandlerClass
     Connect *wait_list_start;
     Connect *wait_list_end;
 
+    char *snd_buf;
+
     void del_from_list(Connect *c);
     void worker(Connect *c);
 

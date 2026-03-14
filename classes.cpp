@@ -1,5 +1,6 @@
 #include "main.h"
 
+const unsigned int array_reserve = 32;
 //======================================================================
 http2::http2()
 {

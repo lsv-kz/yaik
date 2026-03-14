@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+extern const unsigned int array_reserve;
 //======================================================================
 class ByteArray
 {
@@ -69,15 +70,9 @@ public:
     {
         if (err)
             return -1;
-        if (size_new > 10000000)
-        {
-            fprintf(stderr, "<%s:%d> Error new size %u\n", __func__, __LINE__, size_new);
-            err = -1;
-            return -1;
-        }
-        if (buf_size >= size_new)
+        if ((buf_size >= size_new) || (size_new == 0))
             return buf_size;
-        size_new += size_new/4;
+        size_new += array_reserve;
         char *tmp_buf = new(std::nothrow) char [size_new];
         if (!tmp_buf)
         {
@@ -95,7 +90,6 @@ public:
 
         buf = tmp_buf;
         buf_size = size_new;
-
         return 0;
     }
     //------------------------------------------------------------------

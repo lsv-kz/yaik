@@ -2,11 +2,8 @@
 
 using namespace std;
 //======================================================================
-static string pidFile;
 const char *nameConfifFile = "yaik.conf";
 static string confPath;
-static string cwd;
-static string myFileName;
 
 //static void print_config();
 //======================================================================
