@@ -62,7 +62,7 @@ enum
     RS500 = 500, RS501, RS502, RS503, RS504, RS505
 };
 
-enum PROTOCOL { PROTOCOL_SELECT, P_HTTP1, P_HTTP2};
+enum PROTOCOL { P_HTTP1, P_HTTP2};
 //----------------------------------------------------------------------
 #define FCGI_KEEP_CONN  1
 #define FCGI_RESPONDER  1

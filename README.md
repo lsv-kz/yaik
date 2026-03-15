@@ -6,7 +6,7 @@ Tested on OS: Debian, OpenBSD, FreeBSD
 
 ### Features:
  * Methods: GET, POST, HEAD
- * Partial content
+ * Partial content (HTTP/1.1)
  * Directory indexing
  * CGI
  * FastCGI

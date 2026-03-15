@@ -11,13 +11,12 @@ void kill_chld(pid_t pid)
     {
         if (waitpid(pid, NULL, WNOHANG) == 0)
         {
-            kill(pid, SIGKILL);
-            waitpid(pid, NULL, 0);
+            if (kill(pid, SIGKILL) == 0)
+                waitpid(pid, NULL, 0);
+            else
+                print_err("<%s:%d> Error kill(): %s\n", __func__, __LINE__, strerror(errno));
         }
     }
-
-    if (errno)
-        errno = 0;
 }
 //======================================================================
 const char *get_script_name(const char *name)

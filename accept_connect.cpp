@@ -5,14 +5,55 @@ using namespace std;
 static mutex mtx_num_conn;
 static condition_variable cond_num_conn;
 
+static Connect *list_start;
+static Connect *list_end;
+
 static int num_conn;
 
 int create_connect(const Server *serv,
                    int clientSocket,
                    unsigned long *allConn,
                    sockaddr_storage *clientAddr);
+
+static void close_connect(Connect *c);
 //======================================================================
-void start_conn()
+static void push_list(Connect *c)
+{
+    c->next = NULL;
+    c->prev = list_end;
+    if (list_end)
+        list_end->next = c;
+    list_end = c;
+    if (!list_start)
+        list_start = c;
+}
+//======================================================================
+static void delete_from_list(Connect *c)
+{
+    if (!c->next && !c->prev)
+    {
+        list_start = list_end = NULL;
+    }
+    else if (!c->next && c->prev)
+    {
+        list_end = c->prev;
+        c->prev->next = NULL;
+    }
+    else if (c->next && c->prev)
+    {
+        c->next->prev = c->prev;
+        c->prev->next = c->next;
+    }
+    else if (c->next && !c->prev)
+    {
+        list_start = c->next;
+        c->next->prev = NULL;
+    }
+
+    c->next = c->prev = NULL;
+}
+//======================================================================
+static void start_conn()
 {
 mtx_num_conn.lock();
     ++num_conn;
@@ -27,13 +68,18 @@ mtx_num_conn.unlock();
     cond_num_conn.notify_one();
 }
 //======================================================================
-void is_maxconn()
+static bool is_maxconn()
 {
 unique_lock<mutex> lk(mtx_num_conn);
-    while (num_conn >= (conf->MaxAcceptConnections - conf->num_servers))
+    while ((num_conn >= (conf->MaxAcceptConnections - conf->num_servers)) && (list_start == NULL))
     {
         cond_num_conn.wait(lk);
     }
+
+    if (num_conn < (conf->MaxAcceptConnections - conf->num_servers))
+        return false;
+    else
+        return true;
 }
 //======================================================================
 void accept_connect()
@@ -42,7 +88,7 @@ void accept_connect()
     num_conn = 0;
     struct pollfd *poll_fd;
 
-    poll_fd = new(nothrow) struct pollfd [conf->num_servers];
+    poll_fd = new(nothrow) struct pollfd [conf->num_servers + conf->MaxAcceptConnections];
     if (!poll_fd)
     {
         print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
@@ -71,6 +117,8 @@ void accept_connect()
     //------------------------------------------------------------------
     bool run = true;
     int num_wait = 0;
+    int poll_fd_index;
+    int timeout = -1;
 
     const Server *serv = conf->all_servers;
     for ( num_wait = 0; serv; serv = serv->next, num_wait++)
@@ -91,9 +139,25 @@ void accept_connect()
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
 
-        is_maxconn();
+        if (is_maxconn())
+            poll_fd_index = conf->num_servers;
+        else
+            poll_fd_index = 0;
 
-        int ret_poll = poll(poll_fd, num_wait, -1);
+        Connect *c = list_start, *next = NULL;
+        for ( num_wait = conf->num_servers; c; ++num_wait, c = next )
+        {
+            next = c->next;
+            poll_fd[num_wait].fd = c->clientSocket;
+            poll_fd[num_wait].events = c->tls.poll_events;
+        }
+
+        if (list_start)
+            timeout = conf->TimeoutPoll;
+        else
+            timeout = -1;
+
+        int ret_poll = poll(poll_fd + poll_fd_index, num_wait - poll_fd_index, timeout);
         if (ret_poll < 0)
         {
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
@@ -104,51 +168,173 @@ void accept_connect()
         else if (ret_poll == 0)
             continue;
 
-        serv = conf->all_servers;
-        for ( int num_ = 0; serv; serv = serv->next, num_++)
+        if (poll_fd_index == 0)
         {
-            if (poll_fd[num_].fd != serv->sock)
+            serv = conf->all_servers;
+            for ( int num_ = 0; serv && (ret_poll > 0); serv = serv->next, num_++)
             {
-                print_err("<%s:%d> Error server %d, socket (%d != %d)\n", __func__, __LINE__,
-                                num_, poll_fd[num_].fd, serv->sock);
-                run = false;
-                break;
-            }
-
-            if (poll_fd[num_].revents == POLLIN)
-            {
-                int clientSocket = accept(serv->sock, (struct sockaddr *)&clientAddr, &addrSize);
-                if (clientSocket == -1)
+                if (poll_fd[num_].fd != serv->sock)
                 {
-                    print_err("<%s:%d>  Error accept(%d): %s\n", __func__, __LINE__, serv->sock, strerror(errno));
-                    if ((errno == EMFILE) || (errno == ENFILE)) // (errno == EINTR)
+                    print_err("<%s:%d> Error server %d, socket (%d != %d)\n", __func__, __LINE__,
+                                    num_, poll_fd[num_].fd, serv->sock);
+                    run = false;
+                    break;
+                }
+
+                if (poll_fd[num_].revents == POLLIN)
+                {
+                    --ret_poll;
+                    int clientSocket = accept(serv->sock, (struct sockaddr *)&clientAddr, &addrSize);
+                    if (clientSocket == -1)
+                    {
+                        print_err("<%s:%d>  Error accept(%d): %s\n", __func__, __LINE__, serv->sock, strerror(errno));
+                        if ((errno == EMFILE) || (errno == ENFILE)) // (errno == EINTR)
+                        {
+                            run = false;
+                            break;
+                        }
+
+                        break;
+                    }
+
+                    int ret = create_connect(serv,
+                                             clientSocket,
+                                             &allConn,
+                                             &clientAddr);
+                    if (ret == 0)
+                        //break;
+                        continue;
+                    else if (ret == -1)
                     {
                         run = false;
                         break;
                     }
-
-                    break;
                 }
-
-                int ret = create_connect(serv,
-                                         clientSocket,
-                                         &allConn,
-                                         &clientAddr);
-                if (ret == 0)
-                    //break;
-                    continue;
-                else if (ret == -1)
+                else if (poll_fd[num_].revents)
                 {
+                    print_err("<%s:%d> Error revents=0x%02X, num_=%d\n", __func__, __LINE__,
+                                                    poll_fd[num_].revents, num_);
                     run = false;
                     break;
                 }
             }
-            else if (poll_fd[num_].revents)
+        }
+
+        if (ret_poll <= 0)
+            continue;
+        c = list_start;
+        next = NULL;
+        for ( int i = conf->num_servers; (i < num_wait) && (ret_poll > 0); ++i, c = next )
+        {
+            next = c->next;
+            int revents = poll_fd[i].revents;
+            if ((c->SecureConnect == false) && (revents | POLLIN))
             {
-                print_err("<%s:%d> Error revents=0x%02X, num_=%d\n", __func__, __LINE__,
-                                                poll_fd[num_].revents, num_);
-                run = false;
-                break;
+                --ret_poll;
+                char buf[16];
+                int ret = recv(c->clientSocket, buf, sizeof(buf) - 1, MSG_PEEK);
+                if (ret > 0)
+                {
+                    buf[ret] = 0;
+                    if (!strncmp(buf, "GET", 3) || !strncmp(buf, "POST", 4) || !strncmp(buf, "HEAD", 4))
+                    {
+                        c->Protocol = P_HTTP1;
+                        if (c->tls.ssl)
+                        {
+                            SSL_clear(c->tls.ssl);
+                            SSL_free(c->tls.ssl);
+                            c->tls.ssl = NULL;
+                        }
+
+                        c->h1 = new(nothrow) http1;
+                        if (c->h1)
+                        {
+                            c->h1->resp.resp_status = RS400;
+                            c->h1->connKeepAlive = false;
+                            send_message(c, "The plain HTTP request was sent to HTTPS port");
+                            delete_from_list(c);
+                            push_wait_list(c);
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            close_connect(c);
+                        }
+
+                        continue;
+                    }
+                    else
+                    {
+                        c->SecureConnect = true;
+                    }
+                }
+                else if (ret < 0)
+                {
+                    //print_err(c, "<%s:%d> 0x%02X read_from_client=%d, %s\n", __func__, __LINE__, poll_fd[i].revents, ret, strerror(errno));
+                    continue;
+                }
+                else
+                {
+                    //print_err(c, "<%s:%d> 0x%02X read_from_client=%d\n", __func__, __LINE__, poll_fd[i].revents, ret);
+                    close_connect(c);
+                    continue;
+                }
+            }
+
+            if (revents & (POLLIN | POLLOUT))
+            {
+                --ret_poll;
+                int ret = ssl_accept(c);
+                if (ret == 1)
+                {
+                    c->tls.poll_events = POLLIN;
+                    c->client_timer = 0;
+                    if (c->Protocol == P_HTTP2)
+                    {
+                        c->h2 = new(nothrow) http2;
+                        if (c->h2)
+                        {
+                            c->h2->con_status = http2::PREFACE_MESSAGE;
+                            delete_from_list(c);
+                            push_wait_list(c);
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            close_connect(c);
+                        }
+                    }
+                    else if (c->Protocol == P_HTTP1)
+                    {
+                        c->h1 = new(nothrow) http1;
+                        if (c->h1)
+                        {
+                            c->h1->con_status = http1::READ_REQUEST;
+                            delete_from_list(c);
+                            push_wait_list(c);
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            close_connect(c);
+                        }
+                    }
+                    else
+                    {
+                        print_err(c, "<%s:%d> Error Protocol\n", __func__, __LINE__);
+                        close_connect(c);
+                    }
+                }
+                else if (ret < 0)
+                {
+                    print_err(c, "<%s:%d> Error ssl_accept()\n", __func__, __LINE__);
+                    close_connect(c);
+                }
+            }
+            else if (revents)
+            {
+                print_err("<%s:%d>  Error revents=0x%02X\n", __func__, __LINE__, poll_fd[0].revents);
+                close_connect(c);
             }
         }
     }
@@ -249,9 +435,9 @@ int create_connect(const Server *serv,
         }
 
         con->tls.poll_events = POLLIN | POLLOUT;
-        con->Protocol = PROTOCOL_SELECT;
+        con->client_timer = time(NULL);
         start_conn();
-        push_wait_list(con);
+        push_list(con);
     }
     else
     {
@@ -278,4 +464,19 @@ int create_connect(const Server *serv,
     }
 
     return 1;
+}
+//======================================================================
+void close_connect(Connect *c)
+{
+    delete_from_list(c);
+    if (c->tls.ssl)
+    {
+        SSL_clear(c->tls.ssl);
+        SSL_free(c->tls.ssl);
+    }
+
+    shutdown(c->clientSocket, SHUT_RDWR);
+    close(c->clientSocket);
+    delete c;
+    decrement_num_conn();
 }
