@@ -898,7 +898,7 @@ void EventHandlerClass::close_connect(Connect *c)
         print_err(c, "<%s:%d> Error close(): %s\n", __func__, __LINE__, strerror(errno));
     }
 
-    event_handler_cl.del_from_list(c);
+    del_from_list(c);
     delete c;
     decrement_num_conn();
 }

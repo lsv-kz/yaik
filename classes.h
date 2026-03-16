@@ -402,8 +402,8 @@ struct Stream
         decode_path.clear();
         decode_query_string.clear();
         host.clear();
-        user_agent = "-";
-        referer = "-";
+        user_agent.clear();
+        referer.clear();
         range.clear();
 
         buf.init();

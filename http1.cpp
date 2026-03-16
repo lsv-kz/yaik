@@ -27,14 +27,13 @@ int set_response(Connect *c)
     {
         if (!strncmp(h->hostname.c_str(), c->h1->resp.host.c_str(), h->hostname.size()))
         {
-//print_err(c, "<%s:%d> [%s] : [%s]\n", __func__, __LINE__, h->hostname.c_str(), c->h1->resp.host.c_str());
             c->h1->resp.vhost = h;
             break;
         }
     }
 
     if (c->h1->resp.vhost == NULL)
-        c->h1->resp.vhost = c->serv->vhosts;
+        c->h1->resp.vhost = c->serv->vhosts; // The first server is the default server.
 
     if ((c->numReq >= (unsigned int)conf->MaxRequestsPerClient) || (conf->TimeoutKeepAlive == 0))
         c->h1->connKeepAlive = false;
@@ -330,6 +329,14 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                 http1_end_request(c);
                 return -1;
             }
+            else if (write_bytes == 0)
+            {
+                print_err(c, "<%s:%d> Error read(fd=%d)=%d\n", __func__, __LINE__, 
+                            c->h1->resp.fd, write_bytes);
+                c->err = -1;
+                http1_end_request(c);
+                return -1;
+            }
         }
         else
         {
@@ -388,8 +395,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             if (c->h1->resp.source_data == FROM_FILE)
             {
                 c->h1->resp.resp_content_len -= ret;
-                if (ret != write_bytes)
-                    lseek(c->h1->resp.fd, write_bytes - ret, SEEK_CUR);
+                if (ret < write_bytes)
+                    lseek(c->h1->resp.fd, ret - write_bytes, SEEK_CUR);
                 if (c->h1->resp.resp_content_len == 0)
                     http1_end_request(c);
             }

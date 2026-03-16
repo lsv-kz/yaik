@@ -67,7 +67,7 @@ int sni_callback(SSL *ssl, int *al, void *arg)
             }
         }
 
-        return SSL_TLSEXT_ERR_ALERT_FATAL; // SSL_ERROR_UNRECOGNIZED_NAME_ALERT
+        return SSL_TLSEXT_ERR_OK; //  SSL_TLSEXT_ERR_ALERT_FATAL (SSL_ERROR_UNRECOGNIZED_NAME_ALERT)
     }
     else
     {
