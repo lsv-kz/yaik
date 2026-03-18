@@ -263,9 +263,15 @@ void print_log(Connect *c, Stream *resp)
     str.cat(" ", 1);
     str.cat_int(resp->send_bytes);
     str.cat(" \"", 2);
-    str.cat(resp->referer.c_str(), resp->referer.size());
+    if (resp->referer.size())
+        str.cat(resp->referer.c_str(), resp->referer.size());
+    else
+        str.cat("-", 1);
     str.cat("\" \"", 3);
-    str.cat(resp->user_agent.c_str(), resp->user_agent.size());
+    if (resp->user_agent.size())
+        str.cat(resp->user_agent.c_str(), resp->user_agent.size());
+    else
+        str.cat("-", 1);
     str.cat("\" - id=", 7);
     str.cat_int(resp->id);
     str.cat(" \n", 2);
@@ -321,9 +327,15 @@ void print_log(Connect *c)
     str.cat(" ", 1);
     str.cat_int(c->h1->resp.send_bytes);
     str.cat(" \"", 2);
-    str.cat(c->h1->resp.referer.c_str(), c->h1->resp.referer.size());
+    if (c->h1->resp.referer.size())
+        str.cat(c->h1->resp.referer.c_str(), c->h1->resp.referer.size());
+    else
+        str.cat("-", 1);
     str.cat("\" \"", 3);
-    str.cat(c->h1->resp.user_agent.c_str(), c->h1->resp.user_agent.size());
+    if (c->h1->resp.user_agent.size())
+        str.cat(c->h1->resp.user_agent.c_str(), c->h1->resp.user_agent.size());
+    else
+        str.cat("-", 1);
     str.cat("\"\n", 2);
 
 mtxLog.lock();

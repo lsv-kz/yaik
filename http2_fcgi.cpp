@@ -396,6 +396,9 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             return;
         }
 
+        if (resp->buf.size() && resp->send_headers)
+            return;
+
         if (resp->cgi.fcgiContentLen == 0)
         {
             if (resp->cgi.fcgiPaddingLen > 0)
@@ -422,6 +425,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     return;
                 }
 
+                resp->cgi.timer = 0;
                 resp->cgi.fcgiPaddingLen -= ret;
                 return;
             }
@@ -446,16 +450,16 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             if (resp->cgi.fcgiContentLen == 0)
                 return;
 
-            switch (s[1])
+            switch (resp->cgi.fcgi_type)
             {
                 case FCGI_STDOUT:
                     break;
                 case FCGI_STDERR:
                     break;
                 case FCGI_END_REQUEST:
-                    //set_frame_data(resp, 0, 1);
                     break;
                 default:
+                    print_err(resp, "<%s:%d> Error fcgi type: %d\n", __func__, __LINE__, resp->cgi.fcgi_type);
                     if (resp->send_headers == false)
                         resp_502(resp);
                     else
@@ -467,10 +471,11 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         }
 
         char buf[16384];
-        int rd = (resp->cgi.fcgiContentLen > (long long)conf->HTTP2_DataBufSize) ? conf->HTTP2_DataBufSize : resp->cgi.fcgiContentLen;
+        int rd = (resp->cgi.fcgiContentLen > (int)c->h2->HTTP2_SendBufSize) ? c->h2->HTTP2_SendBufSize : resp->cgi.fcgiContentLen;
         int ret = read(fd, buf, rd);
         if (ret > 0)
         {
+            resp->cgi.timer = 0;
             resp->cgi.fcgiContentLen -= ret;
             switch (resp->cgi.fcgi_type)
             {
@@ -482,8 +487,13 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     }
                     else
                     {
-                        set_frame_data(resp, ret, 0);
-                        resp->send_data.cat(buf, ret);
+                        if (resp->buf.size())
+                            resp->buf.cat(buf, ret);
+                        else
+                        {
+                            set_frame_data(resp, ret, 0);
+                            resp->send_data.cat(buf, ret);
+                        }
                     }
                     break;
                 case FCGI_STDERR:
@@ -492,7 +502,8 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     break;
                 case FCGI_END_REQUEST:
                     {
-                        set_frame_data(resp, 0, 1);
+                        if (resp->buf.size() == 0)
+                            set_frame_data(resp, 0, FLAG_END_STREAM);
                         resp->cgi.end = true;
                     }
                     break;

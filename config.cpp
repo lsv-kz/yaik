@@ -84,7 +84,7 @@ void create_conf_file(const char *path)
     "MaxAcceptConnections  10000\n\n"
     "MaxRequestsPerClient  1000\n\n"
     "HTTP1_DataBufSize     262144\n"
-    "HTTP2_DataBufSize     16384\n\n"
+    "HTTP2_RecvBufSize     16384\n\n"
     "Timeout               35  # seconds\n"
     "TimeoutKeepAlive      120 # seconds\n"
     "TimeoutPoll           10  # milliseconds\n\n"
@@ -267,7 +267,7 @@ void create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2, CGI_TY
 int read_conf_file(FILE *fconf)
 {
     char str[1024];
-    bool default_server = true;
+    bool set_default_server = false;
     bool SecureConnect = false;
     Server *prev_server = NULL;
 
@@ -319,17 +319,14 @@ int read_conf_file(FILE *fconf)
                 c.ListenBacklog = atoi(s2);
             else if ((!strcmp(s1, "HTTP1_DataBufSize")) && is_number(s2))
                 c.HTTP1_DataBufSize = atoi(s2);
-            else if ((!strcmp(s1, "HTTP2_DataBufSize")) && is_number(s2))
+            else if ((!strcmp(s1, "HTTP2_RecvBufSize")) && is_number(s2))
             {
-                c.HTTP2_DataBufSize = atoi(s2);
-                if ((c.HTTP2_DataBufSize <= 0) || (c.HTTP2_DataBufSize > 16384))
+                c.HTTP2_RecvBufSize = atoi(s2);
+                if ((c.HTTP2_RecvBufSize <= 0) || (c.HTTP2_RecvBufSize > 16384))
                 {
-                    fprintf(stderr, "<%s:%d> Error read config file: HTTP2_DataBufSize > 16384, [%s], line <%d>\n", __func__, __LINE__, str, line_);
+                    fprintf(stderr, "<%s:%d> Error read config file: HTTP2_RecvBufSize > 16384, [%s], line <%d>\n", __func__, __LINE__, str, line_);
                     return -1;
                 }
-
-                if (c.HTTP2_DataBufSize > 16375)
-                    c.HTTP2_DataBufSize = 16375;
             }
             else if ((!strcmp(s1, "MaxAcceptConnections")) && is_number(s2))
                 c.MaxAcceptConnections = atoi(s2);
@@ -511,10 +508,10 @@ int read_conf_file(FILE *fconf)
                                 else if (!strcmp(s1, "DocumentRoot"))
                                 {
                                     vhost->DocumentRoot = s2;
-                                    if (default_server)
+                                    if (set_default_server == false)
                                     {
                                         c.DocumentRoot = vhost->DocumentRoot;
-                                        default_server = false;
+                                        set_default_server = true;
                                     }
                                 }
                                 else if (!strcmp(s1, "Certificate"))
@@ -898,9 +895,4 @@ int set_max_fd(int max_open_fd)
 void free_fcgi_list()
 {
     c.free_fcgi_list();
-}
-//======================================================================
-void setDataBufSize(int n)
-{
-    c.HTTP2_DataBufSize = n;
 }

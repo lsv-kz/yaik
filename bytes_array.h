@@ -236,7 +236,7 @@ public:
         return buf_len;
     }
     //------------------------------------------------------------------
-    int read_file(int fd, unsigned int len)
+/*    int read_file(int fd, unsigned int len)
     {
         if ((len == 0) || err)
             return -1;
@@ -256,7 +256,7 @@ public:
 
         buf_len = ret;
         return ret;
-    }
+    }*/
     //------------------------------------------------------------------
     int get_byte(unsigned int i)
     {

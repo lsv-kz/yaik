@@ -97,6 +97,7 @@ int main(int argc, char *argv[])
     pid = getpid();
     cout << "\n[" << get_time().c_str() << "] - server \"" << conf->ServerSoftware.c_str()
          << "\nhardware_concurrency = " << thread::hardware_concurrency() << "\n";
+    cout << "\nDocumentRoot: " << conf->DocumentRoot.c_str() << "\n";
     cerr << "HeaderTableSize: " << conf->HeaderTableSize << "\n";
     pid_t gid = getgid();
     cout << "pid="  << pid << "; uid=" << getuid() << "; gid=" << gid << "\n";
@@ -195,7 +196,7 @@ void print_config()
          << "\n   MaxConcurrentStreams   : " << conf->MaxConcurrentStreams
          << "\n   MaxAcceptConnections   : " << conf->MaxAcceptConnections
          << "\n   HTTP1_DataBufSize      : " << conf->HTTP1_DataBufSize
-         << "\n   HTTP2_DataBufSize      : " << conf->HTTP2_DataBufSize
+         << "\n   HTTP2_RecvBufSize      : " << conf->HTTP2_RecvBufSize
          << "\n   HeaderTableSize        : " << conf->HeaderTableSize
          << "\n   MaxCgiProc             : " << conf->MaxCgiProc
          << "\n   Timeout                : " << conf->Timeout

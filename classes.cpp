@@ -7,6 +7,7 @@ http2::http2()
     recv_settings = recv_settings_ack = send_settings_ack = false;
     try_again = false;
     header_len = id = body_len = 0;
+    HTTP2_SendBufSize = 16384-9; // max size frame payload
     init_window_size = 65535;
     connect_window_size = 0;
     max_frame_size = 0;

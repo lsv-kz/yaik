@@ -269,10 +269,10 @@ int EventHandlerClass::cgi_stdin(Stream *resp, int fd)
     return ret;
 }
 //======================================================================
-int EventHandlerClass::cgi_stdout(Stream *resp, int fd)
+int EventHandlerClass::cgi_stdout(Connect *c, Stream *resp, int fd)
 {
     char buf[16384];
-    int ret = read(fd, buf, conf->HTTP2_DataBufSize);
+    int ret = read(fd, buf, c->h2->HTTP2_SendBufSize);
     if (ret == -1)
     {
         print_err(resp, "<%s:%d> Error read(): %s\n", __func__, __LINE__, strerror(errno));
@@ -282,8 +282,19 @@ int EventHandlerClass::cgi_stdout(Stream *resp, int fd)
     }
     else if (ret > 0)
     {
-        resp->buf.cat(buf, ret);
         resp->cgi.timer = 0;
+        if ((!resp->send_headers) && (!resp->create_headers))
+            resp->buf.cat(buf, ret);
+        else
+        {
+            if (resp->buf.size())
+                resp->buf.cat(buf, ret);
+            else
+            {
+                set_frame_data(resp, ret, 0);
+                resp->send_data.cat(buf, ret);
+            }
+        }
     }
 
     return ret;
@@ -411,9 +422,9 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
 
         if (revents & POLLIN)
         {
-            if (resp->buf.size() >= conf->HTTP2_DataBufSize)
+            if (resp->buf.size() && resp->send_headers)
                 return;
-            int ret = cgi_stdout(resp, fd);
+            int ret = cgi_stdout(c, resp, fd);
             if (ret == ERR_TRY_AGAIN)
             {
                 print_err(resp, "<%s:%d> cgi_stdout()=ERR_TRY_AGAIN, id=%d \n", __func__, __LINE__, resp->id);
@@ -436,7 +447,8 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                     resp->cgi.from_script = -1;
                 }
 
-                set_frame_data(resp, 0, FLAG_END_STREAM);
+                if (resp->buf.size() == 0)
+                    set_frame_data(resp, 0, FLAG_END_STREAM);
                 resp->cgi.end = true;
             }
             else

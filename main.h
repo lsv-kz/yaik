@@ -120,6 +120,8 @@ struct http2
     int flags;
     int id;
 
+    unsigned int HTTP2_SendBufSize;
+
     long init_window_size;
     long connect_window_size;
     long max_frame_size;
@@ -364,7 +366,7 @@ class EventHandlerClass
     int cgi_create_proc(Connect *c, Stream *r);
     int cgi_fork(Connect *c, Stream *r, int* serv_cgi, int* cgi_serv);
     int cgi_stdin(Stream *r, int fd);
-    int cgi_stdout(Stream *r, int fd);
+    int cgi_stdout(Connect *c, Stream *r, int fd);
     void cgi_headers_parse(Connect *c);
 
     void cgi_worker(Connect *c, int i);
@@ -437,7 +439,6 @@ int scgi_create_connect(Connect *c, Stream *r);
 int read_conf_file(const char *path_conf);
 int set_max_fd(int max_open_fd);
 void free_fcgi_list();
-void setDataBufSize(int n);
 //------------------------- index_dir.cpp ------------------------------
 int index_dir(Connect *c, const char *path, const char *uri, ByteArray *b);
 //----------------------- percent_coding.cpp----------------------------

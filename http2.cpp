@@ -203,8 +203,8 @@ int set_frame_data(Connect *c, Stream *resp)
         if (resp->buf.size_remain())
         {
             unsigned int len = resp->buf.size_remain();
-            if (len > conf->HTTP2_DataBufSize)
-                len = conf->HTTP2_DataBufSize;
+            if (len > c->h2->HTTP2_SendBufSize)
+                len = c->h2->HTTP2_SendBufSize;
             set_frame_data(resp, len, 0);
             resp->send_data.cat(resp->buf.ptr_remain(), len);
             resp->buf.set_offset(len);
@@ -223,8 +223,8 @@ int set_frame_data(Connect *c, Stream *resp)
     {
         if (resp->source_data == FROM_FILE)
         {
-            if (resp->resp_content_len > conf->HTTP2_DataBufSize)
-                data_len = conf->HTTP2_DataBufSize;
+            if (resp->resp_content_len > c->h2->HTTP2_SendBufSize)
+                data_len = c->h2->HTTP2_SendBufSize;
             else
                 data_len = (int)resp->resp_content_len;
 
@@ -264,8 +264,8 @@ int set_frame_data(Connect *c, Stream *resp)
         }
         else if (resp->source_data == DIRECTORY)
         {
-            if (resp->resp_content_len > conf->HTTP2_DataBufSize)
-                data_len = conf->HTTP2_DataBufSize;
+            if (resp->resp_content_len > c->h2->HTTP2_SendBufSize)
+                data_len = c->h2->HTTP2_SendBufSize;
             else
                 data_len = (int)resp->resp_content_len;
 
@@ -304,7 +304,6 @@ int set_response(Connect *c, Stream *resp)
     {
         if (!strncmp(h->hostname.c_str(), resp->host.c_str(), h->hostname.size()))
         {
-//print_err(c, "<%s:%d> [%s] : [%s]\n", __func__, __LINE__, h->hostname.c_str(), resp->host.c_str());
             resp->vhost = h;
             break;
         }
@@ -702,7 +701,7 @@ int EventHandlerClass::recv_frame_(Connect *c)
                 ((unsigned char)c->h2->header[7]<<8) + (unsigned char)c->h2->header[8];
             if (conf->PrintDebugMsg)
                 hex_print_stderr(__func__, __LINE__, c->h2->header, 9);
-            if (c->h2->body_len > conf->HTTP2_DataBufSize)
+            if (c->h2->body_len > conf->HTTP2_RecvBufSize)
             {
                 print_err(c, "<%s:%d> Error frame size: %d\n", __func__, __LINE__, c->h2->body_len + 9);
                 return -1;
@@ -786,13 +785,12 @@ int EventHandlerClass::parse_frame(Connect *c)
                     n += ((unsigned char)c->h2->body.get_byte(ind + 4)<<8);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
-                    if (n < conf->HTTP2_DataBufSize)
-                    {
-                        setDataBufSize(n);
-                    }
+                    if (n < c->h2->HTTP2_SendBufSize)
+                        c->h2->HTTP2_SendBufSize = n;
+
                     if (conf->PrintDebugMsg)
-                        print_err(c, "<%s:%d> SETTINGS_MAX_FRAME_SIZE [%ld], conf->HTTP2_DataBufSize=%d, id=0 \n",
-                                        __func__, __LINE__, n, conf->HTTP2_DataBufSize);
+                        print_err(c, "<%s:%d> SETTINGS_MAX_FRAME_SIZE [%ld], HTTP2_SendBufSize=%u, id=0 \n",
+                                        __func__, __LINE__, n, c->h2->HTTP2_SendBufSize);
                 }
             }
 
@@ -1209,14 +1207,10 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
         else
         {
             if (c->h2->connect_window_size <= 0)
-            {
                 return 0;
-            }
 
             if (resp->stream_window_size <= 0)
-            {
                 return 0;
-            }
 
             int ret = set_frame_data(c, resp);
             if (ret < 0)

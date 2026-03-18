@@ -163,7 +163,7 @@ public:
     bool TcpNoDelay;
 
     unsigned int HTTP1_DataBufSize;
-    unsigned int HTTP2_DataBufSize;
+    unsigned int HTTP2_RecvBufSize;
 
     int MaxAcceptConnections;
 
