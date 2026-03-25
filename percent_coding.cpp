@@ -9,7 +9,8 @@ int encode(const char *s_in, char *s_out, int len_out)
     int cnt_o = 0;
     char *p = s_out;
     char not_encode[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz" "0123456789" "/:-_.!~*'() ";
+        "abcdefghijklmnopqrstuvwxyz" "0123456789" "/:-_.!~*"; // '
+        //"abcdefghijklmnopqrstuvwxyz" "0123456789" "/:-_.!~*'()";
 
     if ((!s_in) || (!s_out))
     {
@@ -38,7 +39,7 @@ int encode(const char *s_in, char *s_out, int len_out)
                     return 0;
                 }
             }
-            else if (c == ' ')
+            /*else if (c == ' ')
             {
                 if ((cnt_o + 1) < len_out)
                 {
@@ -50,7 +51,7 @@ int encode(const char *s_in, char *s_out, int len_out)
                     *s_out = 0;
                     return 0;
                 }
-            }
+            }*/
             else
             {
                 if ((cnt_o + 1) < len_out)
@@ -119,8 +120,8 @@ int decode(const char *s_in, int len_in, string& s_out)
 
             s_out += (char)i;
         }
-        else if (c == '+')
-            s_out += ' ';
+        //else if (c == '+')
+        //    s_out += ' ';
         else
             s_out += c;
 

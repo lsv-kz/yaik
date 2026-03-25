@@ -121,7 +121,10 @@ int set_response(Connect *c)
             return -RS403;
         ret = is_cgi(&c->h1->resp);
         if (ret < 0)
+        {
+            print_err(c, "<%s:%d> File \"%s\" not found\n", __func__, __LINE__, c->h1->resp.clean_decode_path);
             return -RS404;
+        }
         else
         {
             c->h1->resp.cgi_status = CGI_CREATE;
@@ -219,7 +222,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             ret = set_response(c);
             if (ret < 0)
             {
-                print_err(c, "<%s:%d> set_response()=%d\n", __func__, __LINE__, ret);
+                //print_err(c, "<%s:%d> set_response()=%d\n", __func__, __LINE__, ret);
                 c->h1->connKeepAlive = false;
                 c->err = ret;
                 http1_end_request(c);

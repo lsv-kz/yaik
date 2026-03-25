@@ -243,7 +243,7 @@ void print_log(Connect *c, Stream *resp)
     str.cat_int(resp->numReq);
     str.cat_str(" - ");
     str.cat_str(c->remoteAddr);
-    str.cat(":", 1);
+    str.cat(" > ", 3);
     str.cat(c->serv->port.c_str(), c->serv->port.size());
     str.cat(" - [", 4);
     str.cat_logtime();
@@ -307,7 +307,7 @@ void print_log(Connect *c)
     str.cat_int(c->numReq);
     str.cat_str(" - ");
     str.cat_str(c->remoteAddr);
-    str.cat(":", 1);
+    str.cat(" > ", 3);
     str.cat(c->serv->port.c_str(), c->serv->port.size());
     str.cat(" - [", 4);
     str.cat_logtime();

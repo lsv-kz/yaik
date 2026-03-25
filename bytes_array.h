@@ -25,10 +25,12 @@ class ByteArray
         const char *get_char = "9876543210123456789";
     
         int_buf[cnt] = 0;
-        while ((cnt > 0) && (ll != 0))
+        while (cnt > 0)
         {
             int_buf[--cnt] = get_char[9 + ll % 10];
             ll /= 10;
+            if (ll == 0)
+                break;
         }
     
         if ((minus) && (cnt > 0))
