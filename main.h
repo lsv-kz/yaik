@@ -504,7 +504,7 @@ void print_err(Stream *r, const char *format, ...);
 void print_log(Connect *c, Stream *r);
 void print_log(Connect *c);
 //----------------------- huffman_code.cpp -----------------------------
-void huffman_encode(const char *s, ByteArray& out);
+int huffman_encode(const char *s, ByteArray& out);
 int huffman_decode(const char *s, int len, std::string& s_out);
 //----------------------- event_handler.cpp ----------------------------
 void push_wait_list(Connect *c);

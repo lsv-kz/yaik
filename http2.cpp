@@ -67,6 +67,7 @@ void add_header(Stream *resp, int ind, int mask, const char *val, bool huffman)
     if (huffman)
     {
         ByteArray buf;
+        buf.reserve(len);
         huffman_encode(val, buf);
         int_to_bytes(resp->headers, buf.size(), 7, 0x80);
         resp->headers.cat(buf.ptr(), buf.size());

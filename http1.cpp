@@ -595,6 +595,7 @@ static int parse_startline_request(Connect *c, const char *s)
     ++i;
     if (s[i] == ' ')
     {
+        print_err(c, "<%s:%d> Error 400, [%s]\n",  __func__, __LINE__, s);
         return -RS400;
     }
 
@@ -611,6 +612,7 @@ static int parse_startline_request(Connect *c, const char *s)
     ++i;
     if (s[i] == ' ')
     {
+        print_err(c, "<%s:%d> Error 400, [%s]\n",  __func__, __LINE__, s);
         return -RS400;
     }
 
@@ -643,6 +645,7 @@ static int parse_header(Connect *c, const char *s)
         {
             if (colon == 0)
             {
+                print_err(c, "<%s:%d> Error 400, [%s]\n",  __func__, __LINE__, s);
                 return -RS400;
             }
 
@@ -652,6 +655,7 @@ static int parse_header(Connect *c, const char *s)
 
     if (s[i] == ' ')
     {
+        print_err(c, "<%s:%d> Error 400, [%s]\n",  __func__, __LINE__, s);
         return -RS400;
     }
 
@@ -715,6 +719,7 @@ int read_request_headers(Connect *c)
             {
                 if (c->h1->resp.httpMethod == M_NULL)
                 {
+                    print_err(c, "<%s:%d> Error: httpMethod == M_NULL\n",  __func__, __LINE__);
                     return -RS400;
                 }
 

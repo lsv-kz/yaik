@@ -1,8 +1,6 @@
-#include <iostream>
-
 #include "bytes_array.h"
 //======================================================================
-static const unsigned int huffman_decode_table[] = {
+const unsigned int huffman_decode_table[] = {
      48,
      49,
      50,
@@ -259,10 +257,9 @@ static const unsigned int huffman_decode_table[] = {
      10,
      13,
      22,
-    256
 };
 //======================================================================
-static const unsigned int huffman_encode_table[][2] = {
+const unsigned int huffman_encode_table[][2] = {
     { 0x00001ff8, 13},
     { 0x007fffd8, 23},
     { 0x0fffffe2, 28},
@@ -519,10 +516,11 @@ static const unsigned int huffman_encode_table[][2] = {
     { 0x07ffffef, 27},
     { 0x07fffff0, 27},
     { 0x03ffffee, 26},
-    { 0x3fffffff, 30}
 };
+
+const unsigned char mask[8] = {0, 1, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f};
 //======================================================================
-static int find_char(const unsigned int in, int size, char *ch)
+static int find_char(const unsigned int in, char *ch)
 {
     int len = 0;
     int j = 0;
@@ -626,38 +624,42 @@ static int find_char(const unsigned int in, int size, char *ch)
         j = ((in >> 4) & 0x1f) + 222;
         len = 28;
     }
-    else if (in > 0xffffffe0)
+    else if (in < 0xfffffffc)
     {
         j = ((in >> 2) & 0x03) + 253;
         len = 30;
     }
-    else
+    else // in >= 0xfffffffc
     {
-        fprintf(stderr, "<%s:%d> Error\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error {in = 0x%x} >= 0xfffffffc\n", __func__, __LINE__, in);
         return 0;
     }
 
     if ((j >= 0) && (j < 256))
         *ch = huffman_decode_table[j];
     else
+    {
+        fprintf(stderr, "<%s:%d> Error j=%d, in=%u\n", __func__, __LINE__, j, in);
         len = 0;
+    }
 
     return len;
 }
 //======================================================================
-const unsigned char mask[8] = {0, 1, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f};
-//======================================================================
-void huffman_decode(const char *s, int len, std::string& out)
+int huffman_decode(const char *s, int len, std::string& out)
 {
     out = "";
+    if ((s == NULL) || (len == 0))
+        return 0;
     unsigned int fifo_buf = 0;
     unsigned int buf = 0;
+    int out_len = 0;
 
     int fifo_max_size = 32;
     int fifo_size = fifo_max_size;
     int buf_ind = 0;
 
-    for ( ; len >= 0; )
+    for ( ; (len > 0) || fifo_size || buf_ind; )
     {
         for ( ; fifo_size > 0; )
         {
@@ -678,7 +680,7 @@ void huffman_decode(const char *s, int len, std::string& out)
                 fifo_buf |= (buf >> buf_ind);
                 buf &= mask[buf_ind];
             }
-            else // fifo_size > buf_ind
+            else // fifo_size >= buf_ind
             {
                 fifo_size -= buf_ind;
                 buf_ind = 0;
@@ -691,86 +693,75 @@ void huffman_decode(const char *s, int len, std::string& out)
         int size = fifo_max_size - fifo_size;
         if (size < 8)
         {
-            if (size < 5)
-                return;
+            if (size == 0)
+                return out_len;
+            else if (size < 5)
+            {
+                switch (fifo_buf)
+                {
+                    case 0x80000000:
+                    case 0xc0000000:
+                    case 0xe0000000:
+                    case 0xf0000000:
+                        return out_len;
+                    default:
+                        fprintf(stderr, "<%s:%d>Error size=%d, %b\n", __func__, __LINE__, size, fifo_buf);
+                        return 0;
+                }
+            }
             else if ((fifo_buf == 0xf8000000) && (size == 5))
-                return;
+                return out_len;
             else if ((fifo_buf == 0xfc000000) && (size == 6))
-                return;
+                return out_len;
             else if ((fifo_buf == 0xfe000000) && (size == 7))
-                return;
+                return out_len;
         }
 
         char ch;
-        int n = find_char(fifo_buf, size, &ch);
+        int n = find_char(fifo_buf, &ch);
         if (n > 0)
         {
             out += ch;
+            out_len++;
             fifo_buf = fifo_buf<<n;
             fifo_size += n;
         }
         else
-            break;
+            return 0;
     }
+
+    return 0;
 }
 //======================================================================
 int huffman_encode(const char *in, ByteArray& out)
 {
     out.init();
-    int index;
-    int huff_buf;
-    int buf_len;
-    int ret = 0;
-
-    unsigned char out_byte = 0;
-    int out_bits_len = 0;
+    unsigned int index = 0;
+    int huff_buf = 0;
+    int huff_buf_len = 0;
+    int out_len = 0;
 
     while (*in)
     {
         index = (unsigned char)*(in++);
-        huff_buf = huffman_encode_table[index][0];
-        buf_len = huffman_encode_table[index][1];
-        if (buf_len < 5)
-        {
-            fprintf(stderr, "<%s:%d> Error len=%d\n", __func__, __LINE__, buf_len);
-            ret = -1;
-            break;
-        }
+        int bits_len = huffman_encode_table[index][1];
+        huff_buf = huff_buf<<bits_len | huffman_encode_table[index][0];
+        huff_buf_len += bits_len;
 
-        while (true)
+        while (huff_buf_len >= 8)
         {
-            if ((buf_len + out_bits_len) < 8)
-            {
-                out_bits_len += buf_len;
-                out_byte |= (0xff & (huff_buf << (8 - out_bits_len)));
-                buf_len = 0;
-            }
-            else
-            {
-                buf_len -= (8 - out_bits_len);
-                out_byte |= (0xff & (huff_buf >> buf_len));
-                out.cat(out_byte);
-                out_bits_len = 0;
-                out_byte = 0;
-            }
-
-            if (buf_len == 0)
-                break;
-            else if (buf_len < 0)
-            {
-                fprintf(stderr, "<%s:%d> Error len=%d\n", __func__, __LINE__, buf_len);
-                return -1;
-            }
+            out.cat((unsigned char)(huff_buf>>(huff_buf_len - 8)));
+            out_len++;
+            huff_buf_len -= 8;
         }
     }
 
-    if (out_bits_len > 0)
+    if (huff_buf_len > 0)
     {
-        unsigned char ch = 0xff;
-        ch >>= out_bits_len;
-        out_byte |= ch;
-        out.cat(out_byte);
+        unsigned char uch = 0xff>>huff_buf_len;
+        out.cat(uch | (huff_buf<<(8 - huff_buf_len)));
+        out_len++;
     }
 
-    return ret;
+    return out_len;
 }
