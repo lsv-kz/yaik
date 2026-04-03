@@ -651,53 +651,55 @@ int huffman_decode(const char *s, int len, std::string& out)
     out = "";
     if ((s == NULL) || (len == 0))
         return 0;
-    unsigned int fifo_buf = 0;
+    int max_bits = 32;
+
+    unsigned int huff_buf = 0;
+    int num_free_bits = max_bits;
+
     unsigned int buf = 0;
+    int buf_size = 0;
+
     int out_len = 0;
 
-    int fifo_max_size = 32;
-    int fifo_size = fifo_max_size;
-    int buf_ind = 0;
-
-    for ( ; (len > 0) || fifo_size || buf_ind; )
+    for ( ; (len > 0) || num_free_bits || buf_size; )
     {
-        for ( ; fifo_size > 0; )
+        for ( ; num_free_bits > 0; )
         {
-            if ((len > 0) && (buf_ind == 0))
+            if ((len > 0) && (buf_size == 0))
             {
                 buf = *((unsigned char*)s++);
-                buf_ind = 8;
+                buf_size = 8;
                 len--;
             }
 
-            if (buf_ind == 0)
+            if (buf_size == 0)
                 break;
 
-            if (fifo_size < buf_ind)
+            if (num_free_bits < buf_size)
             {
-                buf_ind -= fifo_size;
-                fifo_size = 0;
-                fifo_buf |= (buf >> buf_ind);
-                buf &= mask[buf_ind];
+                buf_size -= num_free_bits;
+                num_free_bits = 0;
+                huff_buf |= (buf >> buf_size);
+                buf &= mask[buf_size];
             }
-            else // fifo_size >= buf_ind
+            else // num_free_bits >= buf_size
             {
-                fifo_size -= buf_ind;
-                buf_ind = 0;
-                if (fifo_size)
-                    buf <<= fifo_size;
-                fifo_buf |= buf;
+                num_free_bits -= buf_size;
+                buf_size = 0;
+                if (num_free_bits)
+                    buf <<= num_free_bits;
+                huff_buf |= buf;
             }
         }
 
-        int size = fifo_max_size - fifo_size;
+        int size = max_bits - num_free_bits;
         if (size < 8)
         {
             if (size == 0)
                 return out_len;
             else if (size < 5)
             {
-                switch (fifo_buf)
+                switch (huff_buf)
                 {
                     case 0x80000000:
                     case 0xc0000000:
@@ -705,26 +707,26 @@ int huffman_decode(const char *s, int len, std::string& out)
                     case 0xf0000000:
                         return out_len;
                     default:
-                        fprintf(stderr, "<%s:%d>Error size=%d, %b\n", __func__, __LINE__, size, fifo_buf);
+                        fprintf(stderr, "<%s:%d>Error size=%d, %b\n", __func__, __LINE__, size, huff_buf);
                         return 0;
                 }
             }
-            else if ((fifo_buf == 0xf8000000) && (size == 5))
+            else if ((huff_buf == 0xf8000000) && (size == 5))
                 return out_len;
-            else if ((fifo_buf == 0xfc000000) && (size == 6))
+            else if ((huff_buf == 0xfc000000) && (size == 6))
                 return out_len;
-            else if ((fifo_buf == 0xfe000000) && (size == 7))
+            else if ((huff_buf == 0xfe000000) && (size == 7))
                 return out_len;
         }
 
         char ch;
-        int n = find_char(fifo_buf, &ch);
-        if (n > 0)
+        int code_len = find_char(huff_buf, &ch);
+        if (code_len > 0)
         {
             out += ch;
             out_len++;
-            fifo_buf = fifo_buf<<n;
-            fifo_size += n;
+            huff_buf = huff_buf<<code_len;
+            num_free_bits += code_len;
         }
         else
             return 0;
