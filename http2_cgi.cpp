@@ -38,14 +38,14 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
         //----------------------- child --------------------------------
         close(cgi_serv[0]);
         cgi_serv[0] = -1;
-
+/*
         int fd = open("/dev/null", O_RDONLY);
         if (fd > 0)
         {
             dup2(fd, STDERR_FILENO);
             close(fd);
         }
-
+*/
         if (resp->httpMethod == M_POST)
         {
             close(serv_cgi[1]);

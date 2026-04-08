@@ -413,98 +413,99 @@ int clean_path(char *path, int len)
                 continue;
             }
 
-            switch (len)
+            if (ch == '.')
             {
-                case 1:
-                    if (ch == '.')
-                    {
+                switch (len)
+                {
+                    case 1:
                         --len;
                         ++j;
                         continue;
-                    }
-                    break;
-                case 2:
-                    if (!memcmp(path + j, "..", 2))
-                    {
-                        if (level_dir > 1)
+                    case 2:
+                        if (!memcmp(path + j, "..", 2))
                         {
-                            j += 2;
+                            if (level_dir > 1)
+                            {
+                                j += 2;
+                                len -= 2;
+                                --level_dir;
+                                i = index_slash[level_dir];
+                                continue;
+                            }
+                            else
+                            {
+                                return -RS400;
+                            }
+                        }
+                        else if (!memcmp(path + j, "./", 2))
+                        {
                             len -= 2;
-                            --level_dir;
-                            i = index_slash[level_dir];
+                            j += 2;
                             continue;
                         }
-                        else
+                        else // hidden file
                         {
-                            return -RS400;
+                            return -RS404;
                         }
-                    }
-                    else if (!memcmp(path + j, "./", 2))
-                    {
-                        len -= 2;
-                        j += 2;
-                        continue;
-                    }
-                    break;
-                case 3:
-                    if (!memcmp(path + j, "../", 3))
-                    {
-                        if (level_dir > 1)
+                    case 3:
+                        if (!memcmp(path + j, "../", 3))
                         {
-                            j += 3;
+                            if (level_dir > 1)
+                            {
+                                j += 3;
+                                len -= 3;
+                                --level_dir;
+                                i = index_slash[level_dir];
+                                continue;
+                            }
+                            else
+                            {
+                                return -RS400;
+                            }
+                        }
+                        else if (!memcmp(path + j, "./.", 3))
+                        {
                             len -= 3;
-                            --level_dir;
-                            i = index_slash[level_dir];
-                            continue;
-                        }
-                        else
-                        {
-                            return -RS400;
-                        }
-                    }
-                    else if (!memcmp(path + j, "./.", 3))
-                    {
-                        len -= 3;
-                        j += 3;
-                        continue;
-                    }
-                    else if (!memcmp(path + j, ".//", 3))
-                    {
-                        len -= 3;
-                        j += 3;
-                        continue;
-                    }
-                    break;
-                default:
-                    if (!memcmp(path + j, "../", 3))
-                    {
-                        if (level_dir > 1)
-                        {
                             j += 3;
-                            len -= 3;
-                            --level_dir;
-                            i = index_slash[level_dir];
                             continue;
                         }
-                        else
+                        else if (!memcmp(path + j, ".//", 3))
                         {
-                            return -RS400;
+                            len -= 3;
+                            j += 3;
+                            continue;
                         }
-                    }
-                    else if (!memcmp(path + j, "...", 3))
-                    {
-                        break;
-                    }
-                    else if (!memcmp(path + j, "./", 2))
-                    {
-                        len -= 2;
-                        j += 2;
-                        continue;
-                    }
-                    else if (ch == '.')
-                    {
-                        return -RS404;
-                    }
+                        else // hidden file
+                        {
+                            return -RS404;
+                        }
+                    default:
+                        if (!memcmp(path + j, "../", 3))
+                        {
+                            if (level_dir > 1)
+                            {
+                                j += 3;
+                                len -= 3;
+                                --level_dir;
+                                i = index_slash[level_dir];
+                                continue;
+                            }
+                            else
+                            {
+                                return -RS400;
+                            }
+                        }
+                        else if (!memcmp(path + j, "./", 2))
+                        {
+                            len -= 2;
+                            j += 2;
+                            continue;
+                        }
+                        else // hidden file
+                        {
+                            return -RS404;
+                        }
+                }
             }
         }
 
@@ -861,12 +862,16 @@ void resp_502(Stream *resp)
 //======================================================================
 void resp_504(Stream *resp)
 {
-    set_frame_headers(resp);
-    add_header(resp, 8, "504");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
+    if (!resp->send_headers)
+    {
+        set_frame_headers(resp);
+        add_header(resp, 8, "504");
+        add_header(resp, 54, conf->ServerSoftware.c_str());
+        add_header(resp, 33, get_time().c_str());
+        add_header(resp, 31, "text/plain");
+        resp->create_headers = true;
+    }
+
     const char *err = "504 Gateway Time-out";
     int len = strlen(err);
     set_frame_data(resp, len, FLAG_END_STREAM);

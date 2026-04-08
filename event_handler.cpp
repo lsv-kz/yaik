@@ -192,10 +192,10 @@ int EventHandlerClass::http2_cgi_set(Connect *c)
             if (c->h2->try_again == true)
                 resp->rst_stream = true;
             else
-            {
+            {/*
                 if (resp->send_headers)
-                    set_rst_stream(c, resp->id, CANCEL);
-                else
+                    set_rst_stream(c, resp->id, INTERNAL_ERROR);
+                else*/
                     resp_504(resp);
             }
         }
