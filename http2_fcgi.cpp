@@ -330,6 +330,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     {
                         resp->post_data.cpy("\0\0\0\0\0\0\0\0", 8);
                         fcgi_set_header(&resp->post_data, FCGI_STDIN);
+                        resp->post_content_len = -1;
                     }
                 }
 
@@ -370,11 +371,8 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         resp->cgi.timer = 0;
         if (resp->post_data.size_remain() == 0)
         {
-            resp->cgi.fcgiContentLen = 0;
-            resp->cgi.timer = 0;
             resp->post_data.init();
-
-            if (resp->post_content_len == 0)
+            if (resp->post_content_len < 0)
                 resp->cgi_status = CGI_STDOUT;
         }
         else

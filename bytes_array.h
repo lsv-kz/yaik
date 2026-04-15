@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <cstring>
-#include <unistd.h>
 #include <sys/time.h>
 
 extern const unsigned int array_reserve;
@@ -14,7 +13,7 @@ class ByteArray
     char *buf;
     unsigned int buf_size;
     unsigned int buf_len;
-    unsigned int offset;
+    int offset;
     int err;
     //------------------------------------------------------------------
     char *ll_to_string(long long ll)
@@ -68,17 +67,17 @@ public:
         err = 0;
     }
     //------------------------------------------------------------------
-    int reserve(unsigned int size_new)
+    int reserve(unsigned int new_size)
     {
         if (err)
             return -1;
-        if ((buf_size >= size_new) || (size_new == 0))
+        if ((buf_size >= new_size) || (new_size == 0))
             return buf_size;
-        size_new += array_reserve;
-        char *tmp_buf = new(std::nothrow) char [size_new];
+        new_size += array_reserve;
+        char *tmp_buf = new(std::nothrow) char [new_size];
         if (!tmp_buf)
         {
-            fprintf(stderr, "<%s:%d> Error new char [%d]\n", __func__, __LINE__, size_new);
+            fprintf(stderr, "<%s:%d> Error new char [%d]\n", __func__, __LINE__, new_size);
             err = -1;
             return -1;
         }
@@ -91,7 +90,7 @@ public:
         }
 
         buf = tmp_buf;
-        buf_size = size_new;
+        buf_size = new_size;
         return 0;
     }
     //------------------------------------------------------------------
@@ -238,28 +237,6 @@ public:
         return buf_len;
     }
     //------------------------------------------------------------------
-/*    int read_file(int fd, unsigned int len)
-    {
-        if ((len == 0) || err)
-            return -1;
-        if (buf_size <= len)
-        {
-            if (reserve(len + 1))
-                return -1;
-        }
-
-        offset = 0;
-        int ret = read(fd, buf, len);
-        if (ret < 0)
-        {
-            fprintf(stderr, "<%s:%d> Error read(): %s\n", __func__, __LINE__, strerror(errno));
-            return -1;
-        }
-
-        buf_len = ret;
-        return ret;
-    }*/
-    //------------------------------------------------------------------
     int get_byte(unsigned int i)
     {
         if ((i >= buf_len) || err)
@@ -284,12 +261,12 @@ public:
     unsigned int get_offset() { return offset; }
     int error() { return err; }
 
-    unsigned int set_offset(unsigned int n)
+    int set_offset(unsigned int n)
     {
         if ((offset + n) > buf_len)
         {
             fprintf(stderr, "<%s:%d> Error new offset=%u, buf_len=%u\n", __func__, __LINE__, offset + n, buf_len);
-            return 0;
+            return -1;
         }
         else if (n == 0)
         {

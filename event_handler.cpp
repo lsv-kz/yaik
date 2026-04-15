@@ -768,9 +768,12 @@ void EventHandlerClass::http2_set_poll(Connect *c)
 
                 if (resp->frame_win_update.size() ||
                     resp->headers.size() ||
-                    resp->send_data.size() ||
                     resp->rst_stream ||
-                    (resp->send_headers && (resp->stream_window_size > 0))
+                    (resp->source_data == FROM_FILE) ||
+                   (
+                      (resp->send_data.size() || (resp->buf.size_remain() && resp->send_headers)) &&
+                      (resp->stream_window_size > 0)
+                   )
                 )
                 {
                     poll_fd[num_poll].events |= POLLOUT;

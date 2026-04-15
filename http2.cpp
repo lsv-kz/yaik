@@ -807,10 +807,8 @@ int EventHandlerClass::parse_frame(Connect *c)
                 if (conf->PrintDebugMsg)
                     print_err(c, "recv SETTINGS flag=ACK\n");
                 c->h2->recv_settings_ack = true;
-                if (c->h2->recv_settings_ack && c->h2->send_settings_ack)
-                {
+                if (c->h2->send_settings_ack)
                     c->h2->con_status = http2::PROCESSING_REQUESTS;
-                }
             }
             else
             {
@@ -831,16 +829,29 @@ int EventHandlerClass::parse_frame(Connect *c)
             return 0;
         }
 
+        int post_data_size = resp->post_data.size();
+        if (post_data_size > 262144)
+        {
+            print_err(resp, "<%s:%d> !!! post_data_size=%d, post_content_len=%lld, id=%d \n", __func__, __LINE__,
+                    post_data_size, resp->post_content_len, resp->id);
+            resp_500(resp);
+            return 0;
+        }
+
         if ((c->h2->body.size() == 0) && (c->h2->header[4] == FLAG_END_STREAM))
         {
-            if ((resp->cgi_type <= PHPCGI) || (resp->cgi_type == SCGI))
+            if (resp->cgi_type <= PHPCGI)
             {
-                resp->cgi_status = CGI_STDOUT;
+                if (resp->cgi.to_script > 0)
+                    close(resp->cgi.to_script);
+                resp->cgi.to_script = -1;
+            }
+            else if ((resp->cgi_type == FASTCGI) || (resp->cgi_type == PHPFPM))
+            {
+                resp->post_data.cat("\1\5\0\1\0\0\0\0", 8);
+                resp->post_content_len = -1; // end post data
             }
 
-            if (resp->cgi.to_script > 0)
-                close(resp->cgi.to_script);
-            resp->cgi.to_script = -1;
             return 0;
         }
 
@@ -883,15 +894,12 @@ int EventHandlerClass::parse_frame(Connect *c)
             {
                 resp->post_data.cat(p_buf, body_len);
                 if (c->h2->header[4] & FLAG_END_STREAM)
+                {
                     resp->post_data.cat("\1\5\0\1\0\0\0\0", 8);
+                    resp->post_content_len = -1; // end post data
+                    return 0;
+                }
             }
-
-            if (resp->cgi.fcgiContentLen)
-            {
-                print_err(resp, "<%s:%d> !!! resp->cgi.fcgiContentLen=%d(%lld), id=%d \n", __func__, __LINE__,
-                        resp->cgi.fcgiContentLen, resp->post_content_len, resp->id);
-            }
-            resp->cgi.fcgiContentLen += body_len;
         }
 
         if (resp->post_content_len < 0)
@@ -1068,7 +1076,7 @@ int EventHandlerClass::send_frames_(Connect *c)
         {
             if (c->h2->cgi_window_update > 32000)
             {
-                print_err(c, "<%s:%d> ??? c->h2->server_window_size(%ld) > 32000\n", __func__, __LINE__, c->h2->cgi_window_update);
+                print_err(c, "<%s:%d> !!! c->h2->server_window_size(%ld) > 32000\n", __func__, __LINE__, c->h2->cgi_window_update);
             }
 
             if (c->h2->frame_win_update.size() == 0)
@@ -1303,6 +1311,8 @@ int EventHandlerClass::send_frame_settings(Connect *c)
     {
         c->h2->send_settings_ack = true;
         c->h2->settings.init();
+        if (c->h2->recv_settings_ack)
+            c->h2->con_status = http2::PROCESSING_REQUESTS;
     }
     else
     {
@@ -1310,11 +1320,6 @@ int EventHandlerClass::send_frame_settings(Connect *c)
             c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
         else
             c->h2->settings.init();
-    }
-
-    if (c->h2->send_settings_ack && c->h2->recv_settings_ack)
-    {
-        c->h2->con_status = http2::PROCESSING_REQUESTS;
     }
 
     return 0;

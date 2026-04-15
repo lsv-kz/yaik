@@ -104,7 +104,6 @@ int create_index_html(Connect *r, vector<string>& list, int num_files, const cha
             "      text-decoration: none;\r\n"
             "      color: rgb(255, 209, 26);\r\n"
             "    }\r\n"
-            
             "    h3 {\r\n"
             "      color: rgb(200,240,120);\r\n"
             "    }\r\n"

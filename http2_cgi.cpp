@@ -283,18 +283,7 @@ int EventHandlerClass::cgi_stdout(Connect *c, Stream *resp, int fd)
     else if (ret > 0)
     {
         resp->cgi.timer = 0;
-        if ((!resp->send_headers) && (!resp->create_headers))
-            resp->buf.cat(buf, ret);
-        else
-        {
-            if (resp->buf.size())
-                resp->buf.cat(buf, ret);
-            else
-            {
-                set_frame_data(resp, ret, 0);
-                resp->send_data.cat(buf, ret);
-            }
-        }
+        resp->buf.cat(buf, ret);
     }
 
     return ret;
@@ -422,7 +411,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
 
         if (revents & POLLIN)
         {
-            if (resp->buf.size() && resp->send_headers)
+            if (resp->buf.size_remain() >= c->h2->HTTP2_SendBufSize)
                 return;
             int ret = cgi_stdout(c, resp, fd);
             if (ret == ERR_TRY_AGAIN)
@@ -550,6 +539,8 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                             add_header(resp, 24, "no-cache, no-store, must-revalidate");
                             resp->create_headers = true;
                             resp->buf.set_offset(p - resp->buf.ptr());
+                            if (resp->buf.size_remain() == 0)
+                                resp->buf.init();
                         }
                         else
                         {
