@@ -17,7 +17,6 @@ http2::http2()
     max_streams = conf->MaxConcurrentStreams;
     num_streams = err = 0;
     work_stream = start_stream = end_stream = NULL;
-    start_list_send_frame = end_list_send_frame = NULL;
 
     settings.cpy("\x00\x00\x12\x04\x00\x00\x00\x00\x00" // SETTINGS (type=0x4)
                 "\x00\x01\x00\x00\x00\x00"              // SETTINGS_HEADER_TABLE_SIZE (0x1)  size of the dynamic table
@@ -59,13 +58,6 @@ http2::~http2()
         if (conf->PrintDebugMsg)
             print_err(r, "<%s:%d>~~~~~~~ Close Stream, id=%d \n", __func__, __LINE__, r->id);
         delete r;
-    }
-
-    FrameRedySend *fr = start_list_send_frame, *fr_next = NULL;
-    for ( ; fr; fr = fr_next)
-    {
-        fr_next = fr->next;
-        delete fr;
     }
 
     if (conf->PrintDebugMsg)
@@ -221,41 +213,6 @@ Stream *http2::get()
 int http2::size()
 {
     return num_streams;
-}
-//----------------------------------------------------------------------
-void http2::push_to_list(FrameRedySend *rf)
-{
-    rf->next = NULL;
-    rf->prev = end_list_send_frame;
-    if (start_list_send_frame)
-    {
-        end_list_send_frame->next = rf;
-        end_list_send_frame = rf;
-    }
-    else
-        start_list_send_frame = end_list_send_frame = rf;
-}
-//----------------------------------------------------------------------
-void http2::del_from_list(FrameRedySend *rf)
-{
-    if (rf->prev && rf->next)
-    {
-        rf->prev->next = rf->next;
-        rf->next->prev = rf->prev;
-    }
-    else if (rf->prev && !rf->next)
-    {
-        rf->prev->next = rf->next;
-        end_list_send_frame = rf->prev;
-    }
-    else if (!rf->prev && rf->next)
-    {
-        rf->next->prev = rf->prev;
-        start_list_send_frame = rf->next;
-    }
-    else if (!rf->prev && !rf->next)
-        start_list_send_frame = end_list_send_frame = NULL;
-    delete rf;
 }
 //----------------------------------------------------------------------
 int http2::get_str(std::string& str, int *len)

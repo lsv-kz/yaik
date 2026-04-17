@@ -131,35 +131,20 @@ void set_frame_goaway(Connect *c, HTTP2_ERRORS error)
     c->h2->goaway.cat(buf, 8);
 }
 //======================================================================
-int set_rst_stream(Connect *c, int id, HTTP2_ERRORS error)
+void set_rst_stream(Connect *c, Stream *resp, HTTP2_ERRORS error)
 {
-    c->h2->close_stream(id);
-
-    FrameRedySend *rf = NULL;
-    rf = new(std::nothrow) FrameRedySend;
-    if (!rf)
-    {
-        print_err(c, "<%s:%d> Error: %s\n", __func__, __LINE__, strerror(errno));
-        return -1;
-    }
-
-    c->h2->push_to_list(rf);
-
-    rf->id = id;
-
-    rf->frame.cpy("\0\0\4\3\0\0\0\0\0"
+    resp->send_rst_stream = true;
+    resp->rst_stream.cpy("\0\0\4\3\0\0\0\0\0"
                          "\0\0\0\0", 13);
-    rf->frame.set_byte((id>>24) & 0x7f, 5);
-    rf->frame.set_byte((id>>16) & 0xff, 6);
-    rf->frame.set_byte((id>>8) & 0xff, 7);
-    rf->frame.set_byte(id & 0xff, 8);
-
-    rf->frame.set_byte((error>>24) & 0xff, 9);
-    rf->frame.set_byte((error>>16) & 0xff, 10);
-    rf->frame.set_byte((error>>8) & 0xff, 11);
-    rf->frame.set_byte(error & 0xff, 12);
-
-    return 0;
+    resp->rst_stream.set_byte((resp->id>>24) & 0x7f, 5);
+    resp->rst_stream.set_byte((resp->id>>16) & 0xff, 6);
+    resp->rst_stream.set_byte((resp->id>>8) & 0xff, 7);
+    resp->rst_stream.set_byte(resp->id & 0xff, 8);
+print_err(resp, "<%s:%d> --- set_rst_stream --- id=%d \n", __func__, __LINE__, resp->id);
+    resp->rst_stream.set_byte((error>>24) & 0xff, 9);
+    resp->rst_stream.set_byte((error>>16) & 0xff, 10);
+    resp->rst_stream.set_byte((error>>8) & 0xff, 11);
+    resp->rst_stream.set_byte(error & 0xff, 12);
 }
 //======================================================================
 void set_frame_data(Stream *resp, int len, int flag)
@@ -295,7 +280,7 @@ int set_response(Connect *c, Stream *resp)
     if (resp->host.size() == 0)
     {
         print_err(c, "<%s:%d> size Host: %d\n", __func__, __LINE__, resp->host.size());
-        resp_400(resp);
+        set_error_message(c, resp, RS400);
         return 0;
     }
 
@@ -343,7 +328,7 @@ int set_response(Connect *c, Stream *resp)
         if (resp->clean_decode_path == NULL)
         {
             print_err(resp, "<%s:%d> Error new char [%d]: %s\n", __func__, __LINE__, len + 1, strerror(errno));
-            resp_500(resp);
+            set_error_message(c, resp, RS500);
             return 0;
         }
 
@@ -362,7 +347,7 @@ int set_response(Connect *c, Stream *resp)
     if (err <= 0)
     {
         print_err(resp, "<%s:%d> Error: clean_path[%d], id=%d \n", __func__, __LINE__, err, resp->id);
-        resp_400(resp);
+        set_error_message(c, resp, RS400);
         return 0;
     }
 
@@ -371,21 +356,21 @@ int set_response(Connect *c, Stream *resp)
         if (resp->sReqContentType.size() == 0)
         {
             print_err(resp, "<%s:%d> Content-Type \?\n", __func__, __LINE__);
-            resp_400(resp);
+            set_error_message(c, resp, RS400);
             return 0;
         }
 
         if (resp->sReqContentLen.size() == 0)
         {
             print_err(resp, "<%s:%d> 411 Length Required\n", __func__, __LINE__);
-            resp_411(resp);
+            set_error_message(c, resp, RS411);
             return 0;
         }
 
         if (resp->post_content_len >= conf->ClientMaxBodySize)
         {
             print_err(resp, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, resp->post_content_len);
-            resp_413(resp);
+            set_error_message(c, resp, RS413);
             return 0;
         }
     }
@@ -408,7 +393,7 @@ int set_response(Connect *c, Stream *resp)
             resp->cgi_type = PHPFPM;
         else
         {
-            resp_404(resp);
+            set_error_message(c, resp, RS404);
             return 0;
         }
     }
@@ -424,7 +409,7 @@ int set_response(Connect *c, Stream *resp)
         if (resp->file_size < 0)
         {
             print_err(resp, "<%s:%d> Error file_size(%s)\n", __func__, __LINE__, path.c_str());
-            resp_500(resp);
+            set_error_message(c, resp, RS500);
             return 0;
         }
 
@@ -434,7 +419,7 @@ int set_response(Connect *c, Stream *resp)
             if (ret < 0)
             {
                 print_err(resp, "<%s:%d> Error parse_range(%s)\n", __func__, __LINE__, resp->range.c_str());
-                resp_400(resp);
+                set_error_message(c, resp, RS400);
                 return 0;
             }
             else if (ret == 0)
@@ -490,11 +475,11 @@ int set_response(Connect *c, Stream *resp)
         {
             print_err(resp, "<%s:%d> Error open(%s): %s\n", __func__, __LINE__, path.c_str(), strerror(errno));
             if (errno == EACCES)
-                resp_403(resp);
+                set_error_message(c, resp, RS403);
             else if (errno == ENOENT)
-                resp_404(resp);
+                set_error_message(c, resp, RS404);
             else
-                resp_500(resp);
+                set_error_message(c, resp, RS500);
             return 0;
         }
 
@@ -530,7 +515,7 @@ int set_response(Connect *c, Stream *resp)
         if (err)
         {
             print_err(resp, "<%s:%d> Error index_dir(): %d\n", __func__, __LINE__, err);
-            resp_500(resp);
+            set_error_message(c, resp, RS500);
             return 0;
         }
         resp->resp_content_len = resp->buf.size();
@@ -563,7 +548,7 @@ int set_response(Connect *c, Stream *resp)
         {
             print_err(resp, "<%s:%d> Error: CONTENT_TYPE %s, create_headers=%d, send_headers=%d\n",
                         __func__, __LINE__, path.c_str(), resp->create_headers, resp->send_headers);
-            resp_404(resp);
+            set_error_message(c, resp, RS404);
         }
         else
         {
@@ -834,7 +819,7 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             print_err(resp, "<%s:%d> !!! post_data_size=%d, post_content_len=%lld, id=%d \n", __func__, __LINE__,
                     post_data_size, resp->post_content_len, resp->id);
-            resp_500(resp);
+            set_error_message(c, resp, RS500);
             return 0;
         }
 
@@ -843,8 +828,10 @@ int EventHandlerClass::parse_frame(Connect *c)
             if (resp->cgi_type <= PHPCGI)
             {
                 if (resp->cgi.to_script > 0)
+                {
                     close(resp->cgi.to_script);
-                resp->cgi.to_script = -1;
+                    resp->cgi.to_script = -1;
+                }
             }
             else if ((resp->cgi_type == FASTCGI) || (resp->cgi_type == PHPFPM))
             {
@@ -906,7 +893,7 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             print_err(resp, "<%s:%d> !!! Error: cont_length=%lld, body_len=%d, size=%d, id=%d \n", __func__, __LINE__,
                         resp->post_content_len, body_len, resp->post_data.size(), resp->id);
-            resp_500(resp);
+            set_error_message(c, resp, RS500);
             return 0;
         }
     }
@@ -920,7 +907,6 @@ int EventHandlerClass::parse_frame(Connect *c)
         if (resp == NULL)
         {
             print_err(c, "<%s:%d> Error id=%d \n", __func__, __LINE__, c->h2->id);
-            set_rst_stream(c, c->h2->id, CANCEL);
             return 0;
         }
 
@@ -934,9 +920,8 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             // frame CONTINUATION not support
             print_err(resp, "<%s:%d> Error: frame CONTINUATION not support, id=%d \n", __func__, __LINE__, c->h2->id);
-            set_response(c, resp);
             print_err(resp, "\"%s\" new request headers.size=%d, id=%d \n", resp->decode_path.c_str(), resp->headers.size(), c->h2->id);
-            resp_431(resp);
+            set_error_message(c, resp, RS431);
             return 0;
         }
     }
@@ -944,7 +929,14 @@ int EventHandlerClass::parse_frame(Connect *c)
     {
         // frame CONTINUATION not support
         print_err(c, "<%s:%d> Error: frame CONTINUATION not support, id=%d \n", __func__, __LINE__, c->h2->id);
-        set_rst_stream(c, c->h2->id, CANCEL);
+        Stream *resp = c->h2->get(c->h2->id);
+        if (!resp)
+        {
+            print_err(c, "<%s:%d> recv DATA: Error list.get(id=%d), h2.body.size()=%d, flag=%d \n", __func__, __LINE__,
+                            c->h2->id, c->h2->body.size(), (int)c->h2->header[4]);
+            return 0;
+        }
+        set_rst_stream(c, resp, CANCEL);
         return 0;
     }
     else if (c->h2->type == GOAWAY)
@@ -975,7 +967,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                 c->h2->close_stream(resp->id);
             }
             else
-                resp->rst_stream = true;
+                resp->recv_rst_stream = true;
         }
         else
             print_err(c, "<%s:%d> RST_STREAM Error stream id=%d does not exist\n", __func__, __LINE__, c->h2->id);
@@ -1067,11 +1059,6 @@ int EventHandlerClass::send_frames_(Connect *c)
             return send_frame_ping(c);
         }
 
-        if (c->h2->start_list_send_frame)
-        {
-            return send_frame_rststream(c);
-        }
-
         if (c->h2->frame_win_update.size() || (c->h2->cgi_window_update > 0))
         {
             if (c->h2->cgi_window_update > 32000)
@@ -1095,16 +1082,13 @@ int EventHandlerClass::send_frames_(Connect *c)
         else if (n == 0)
             return 0;
 
-        if (c->h2->work_stream == NULL)
-            return 0;
         Stream *resp = c->h2->work_stream;
         if (resp == NULL)
+            return 0;
+
+        if (resp->send_rst_stream && (c->h2->try_again == false))
         {
-            if ((resp = c->h2->start_stream) == NULL)
-            {
-                print_err(c, "<%s:%d> ??? resp == NULL\n", __func__, __LINE__);
-                return 0;
-            }
+            return send_frame_rststream(c, resp);
         }
 
         if (resp->frame_win_update.size() || (resp->cgi.window_update > 0))
@@ -1125,16 +1109,18 @@ int EventHandlerClass::send_frames_(Connect *c)
         if (resp->headers.size())
         {
             int ret = send_frame_headers(c, resp);
-            if (ret < 0)
+            if (ret <= 0)
                 return ret;
         }
 
-        if (resp->send_headers && (!resp->send_end_stream))
+        if (resp->send_headers)
         {
             int ret = send_frame_data(c, resp);
-            if (ret < 0)
+            if (ret <= 0)
                 return ret;
         }
+//print_err(resp, "<%s:%d> --- %lld ---\n", __func__, __LINE__, resp->send_bytes);
+        c->h2->work_stream = resp->next;
     }
     else
     {
@@ -1147,7 +1133,10 @@ int EventHandlerClass::send_frames_(Connect *c)
 //======================================================================
 int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
 {
-    if (resp->headers.size() && (!resp->send_headers))
+    if (resp->send_headers)
+        return 0;
+
+    if (resp->headers.size())
     {
         int ret = write_to_client(c, resp->headers.ptr_remain(), resp->headers.size_remain(), resp->id);
         if (ret < 0)
@@ -1166,7 +1155,7 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
         if (resp->headers.size_remain())
             return ERR_TRY_AGAIN;
         resp->send_headers = true;
-        if (resp->headers.get_byte(4) & FLAG_END_STREAM)
+        if ((resp->headers.get_byte(4) & FLAG_END_STREAM) || resp->recv_rst_stream)
         {
             if (conf->PrintDebugMsg)
             {
@@ -1174,9 +1163,9 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
                         __func__, __LINE__, resp->clean_decode_path, resp->send_bytes, resp->id);
             }
 
-            resp->send_end_stream = true;
             print_log(c, resp);
             c->h2->close_stream(resp->id);
+            return 0;
         }
         else
         {
@@ -1186,9 +1175,11 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
                 hex_print_stderr(__func__, __LINE__, resp->headers.ptr(), resp->headers.size());
             }
             resp->headers.init();
+            if (resp->send_rst_stream)
+                return 0;
         }
 
-        return 0;
+        return 1;
     }
     else
     {
@@ -1201,32 +1192,11 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
 {
     if (resp->send_data.size() == 0)
     {
-        if (resp->rst_stream)
-        {
-            if (resp->source_data == DYN_PAGE)
-                set_rst_stream(c, resp->id, CANCEL);
-            else
-            {
-                print_log(c, resp);
-                c->h2->close_stream(resp->id);
-            }
-
-            return 0;
-        }
-        else
-        {
-            if (c->h2->connect_window_size <= 0)
-                return 0;
-
-            if (resp->stream_window_size <= 0)
-                return 0;
-
-            int ret = set_frame_data(c, resp);
-            if (ret < 0)
-                return ret;
-            else if (ret == 0)
-                return 0;
-        }
+        int ret = set_frame_data(c, resp);
+        if (ret < 0)
+            return ret;
+        else if (ret == 0)
+            return 1;
     }
 
     int ret = write_to_client(c, resp->send_data.ptr_remain(), resp->send_data.size_remain(), resp->id);
@@ -1264,23 +1234,26 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
                                                 ret, resp->send_bytes, resp->id);
     }
 
-    if ((resp->send_data.get_byte(4) & FLAG_END_STREAM) || resp->rst_stream)
+    if ((resp->send_data.get_byte(4) & FLAG_END_STREAM) || resp->recv_rst_stream)
     {
         if (conf->PrintDebugMsg)
         {
-            print_err(resp, "<%s:%d>... send frame DATA, END_STREAM, [%s] send %lld bytes, data.size=%d ... id=%d \n",
-                        __func__, __LINE__, resp->clean_decode_path, resp->send_bytes, resp->send_data.size(), resp->id);
+            print_err(resp, "<%s:%d>... send frame DATA, flag=0x%02X, send %lld bytes, recv_rst_stream=%d ... id=%d \n",
+                        __func__, __LINE__, resp->send_data.get_byte(4), resp->send_bytes, resp->recv_rst_stream, resp->id);
         }
 
-        resp->send_end_stream = true;
         print_log(c, resp);
         c->h2->close_stream(resp->id);
         return 0;
     }
     else
+    {
         resp->send_data.init();
+        if (resp->send_rst_stream)
+            return 0;
+    }
 
-    return 0;
+    return 1;
 }
 //======================================================================
 int EventHandlerClass::send_frame_settings(Connect *c)
@@ -1366,30 +1339,34 @@ int EventHandlerClass::send_frame_goawey(Connect *c)
     return -1;
 }
 //======================================================================
-int EventHandlerClass::send_frame_rststream(Connect *c)
+int EventHandlerClass::send_frame_rststream(Connect *c, Stream *resp)
 {
-    FrameRedySend *rf = c->h2->start_list_send_frame;
-    if (!rf)
+    if (resp->rst_stream.size() == 0)
     {
-        return 0;
+        print_err(resp, "<%s:%d> Error size frame RST_STREAM 0 bytes, id=%d \n", __func__, __LINE__, resp->id);
+        return -1;
     }
 
-    int ret = write_to_client(c, rf->frame.ptr_remain(), rf->frame.size_remain(), 0);
+    int ret = write_to_client(c, resp->rst_stream.ptr_remain(), resp->rst_stream.size_remain(), 0);
     if (ret < 0)
     {
-        print_err(c, "<%s:%d> Error send frame GOAWAY, id=0 \n", __func__, __LINE__);
         if (ret != ERR_TRY_AGAIN)
-            c->h2->del_from_list(rf);
+        {
+            print_err(resp, "<%s:%d> Error send frame RST_STREAM, id=%d \n", __func__, __LINE__, resp->id);
+        }
         return ret;
     }
 
     if (conf->PrintDebugMsg)
-        hex_print_stderr(__func__, __LINE__, rf->frame.ptr_remain(), rf->frame.size_remain());
+        hex_print_stderr(__func__, __LINE__, resp->rst_stream.ptr_remain(), resp->rst_stream.size_remain());
     c->client_timer = 0;
-    rf->frame.set_offset(ret);
-    if (rf->frame.size_remain())
+    resp->rst_stream.set_offset(ret);
+    if (resp->rst_stream.size_remain())
         return ERR_TRY_AGAIN;
-    c->h2->del_from_list(rf);
+    resp->resp_status = 0;
+    resp->referer = "send frame RST_STREAM";
+    print_log(c, resp);
+    c->h2->close_stream(resp->id);
     return 0;
 }
 //======================================================================

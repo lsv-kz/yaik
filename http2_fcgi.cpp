@@ -283,7 +283,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
-                    resp_502(resp);
+                    set_error_message(c, resp, RS502);
                 return;
             }
 
@@ -299,7 +299,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         {
             print_err(resp, "<%s:%d> Error 0x%02X(0x%02X), fd=%d, id=%d \n", __func__, __LINE__,
                         revents, events, fd, resp->id);
-            resp_502(resp);
+            set_error_message(c, resp, RS502);
         }
     }
     else if (resp->cgi_status == FASTCGI_PARAMS)
@@ -315,7 +315,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
-                    resp_502(resp);
+                    set_error_message(c, resp, RS502);
                 return;
             }
 
@@ -341,16 +341,16 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         {
             print_err(resp, "<%s:%d> FASTCGI_PARAMS Error revents=0x%02X, id=%d \n",
                             __func__, __LINE__, revents, resp->id);
-            resp_502(resp);
+            set_error_message(c, resp, RS502);
         }
     }
     else if (resp->cgi_status == CGI_STDIN)
     {
         if (revents != POLLOUT)
         {
-            print_err(resp, "<%s:%d> FASTCGI_STDIN Error revents=0x%02X, id=%d \n",
-                            __func__, __LINE__, revents, resp->id);
-            resp_502(resp);
+            print_err(resp, "<%s:%d> FASTCGI_STDIN Error revents=0x%02X, id=%d \n", __func__, __LINE__,
+                            revents, resp->id);
+            set_error_message(c, resp, RS502);
             return;
         }
 
@@ -362,35 +362,32 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                 print_err(resp, "<%s:%d> Error write()=%d: %s; id=%d \n", __func__, __LINE__,
                             ret, strerror(errno), resp->id);
                 resp->post_data.init();
-                resp_502(resp);
+                set_error_message(c, resp, RS502);
             }
             return;
         }
 
         resp->post_data.set_offset(ret);
-        resp->cgi.timer = 0;
         if (resp->post_data.size_remain() == 0)
         {
+            resp->cgi.timer = 0;
             resp->post_data.init();
             if (resp->post_content_len < 0)
                 resp->cgi_status = CGI_STDOUT;
         }
         else
         {
-            print_err(resp, "<%s:%d> !!! Error write()=%d(%d), id=%d \n",
-                        __func__, __LINE__, ret, resp->post_data.size_remain(), resp->id);
+            print_err(resp, "<%s:%d> !!! Error write()=%d(%d), id=%d \n", __func__, __LINE__,
+                            ret, resp->post_data.size_remain(), resp->id);
         }
     }
     else if (resp->cgi_status == CGI_STDOUT)
     {
         if (revents != POLLIN)
         {
-            print_err(resp, "<%s:%d> FASTCGI_STDOUT Error revents=0x%02X, id=%d \n",
-                        __func__, __LINE__, revents, resp->id);
-            if (resp->send_headers == false)
-                resp_502(resp);
-            else
-                set_rst_stream(c, resp->id, CANCEL);
+            print_err(resp, "<%s:%d> FASTCGI_STDOUT Error revents=0x%02X, id=%d \n", __func__, __LINE__,
+                            revents, resp->id);
+            set_error_message(c, resp, RS502);
             return;
         }
 
@@ -405,10 +402,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                 if (resp->cgi.fcgiPaddingLen > (int)sizeof(s))
                 {
                     resp->post_data.init();
-                    if (resp->send_headers == false)
-                        resp_502(resp);
-                    else
-                        set_rst_stream(c, resp->id, CANCEL);
+                    set_error_message(c, resp, RS502);
                     return;
                 }
 
@@ -416,10 +410,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                 if (ret <= 0)
                 {
                     resp->post_data.init();
-                    if (resp->send_headers == false)
-                        resp_502(resp);
-                    else
-                        set_rst_stream(c, resp->id, CANCEL);
+                    set_error_message(c, resp, RS502);
                     return;
                 }
 
@@ -435,10 +426,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             {
                 if ((ret == -1) && (errno == EAGAIN))
                     return;
-                if (resp->send_headers == false)
-                    resp_502(resp);
-                else
-                    set_rst_stream(c, resp->id, CANCEL);
+                set_error_message(c, resp, RS502);
                 return;
             }
 
@@ -458,10 +446,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     break;
                 default:
                     print_err(resp, "<%s:%d> Error fcgi type: %d\n", __func__, __LINE__, resp->cgi.fcgi_type);
-                    if (resp->send_headers == false)
-                        resp_502(resp);
-                    else
-                        set_rst_stream(c, resp->id, CANCEL);
+                    set_error_message(c, resp, RS502);
                     return;
             }
 
@@ -512,10 +497,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             if (errno != EAGAIN)
             {
                 print_err(resp, "<%s:%d> Error read() = %d\n", __func__, __LINE__, ret);
-                if (resp->send_headers == false)
-                    resp_502(resp);
-                else
-                    set_rst_stream(c, resp->id, CANCEL);
+                set_error_message(c, resp, RS502);
             }
         }
     }

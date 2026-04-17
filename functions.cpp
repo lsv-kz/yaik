@@ -734,148 +734,34 @@ void resp_204(Stream *resp)
     set_frame_data(resp, 0, FLAG_END_STREAM);
 }
 //======================================================================
-void resp_400(Stream *resp)
+void set_error_message(Connect *c, Stream *resp, int err)
 {
-    set_frame_headers(resp);
-    add_header(resp, 12);
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "400 Bad Request";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_403(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, "403");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "403 Forbidden";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_404(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 13);
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "404 Not Found";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_411(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, "411");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "411 Length Required";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_413(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, "413");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "413 Request entity too large";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_414(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, "414");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "414 URI Too Long";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_431(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, "431");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "431 Request Header Fields Too Large";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_500(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 14);
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "500 Internal Server Error";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_502(Stream *resp)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, "502");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-    const char *err = "502 Bad Gateway";
-    int len = strlen(err);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
-}
-//======================================================================
-void resp_504(Stream *resp)
-{
-    if (!resp->send_headers)
+    if (resp->send_headers)
     {
-        set_frame_headers(resp);
-        add_header(resp, 8, "504");
-        add_header(resp, 54, conf->ServerSoftware.c_str());
-        add_header(resp, 33, get_time().c_str());
-        add_header(resp, 31, "text/plain");
-        resp->create_headers = true;
+        set_rst_stream(c, resp, CANCEL);
     }
-
-    const char *err = "504 Gateway Time-out";
-    int len = strlen(err);
+    else
+    {
+        if ((c->h2->try_again == true) && resp->headers.size())
+            set_rst_stream(c, resp, CANCEL);
+        else
+            set_error(resp, err);
+    }
+}
+//======================================================================
+void set_error(Stream *resp, int err)
+{
+    set_frame_headers(resp);
+    add_header(resp, 8, http2_status_resonse(err));
+    add_header(resp, 54, conf->ServerSoftware.c_str());
+    add_header(resp, 33, get_time().c_str());
+    add_header(resp, 31, "text/plain");
+    resp->create_headers = true;
+print_err(resp, "<%s:%d> --- set_error %d --- id=%d \n", __func__, __LINE__, err, resp->id);
+    const char *err_msg = http1_status_response(err);
+    int len = strlen(err_msg);
     set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err, len);
+    resp->send_data.cat(err_msg, len);
 }
 //======================================================================
 const char *http2_status_resonse(int st)
@@ -918,8 +804,14 @@ const char *http2_status_resonse(int st)
             return "414";
         case RS416:
             return "416";
+        case RS417:
+            return "417";
+        case RS418:
+            return "418";
         case RS429:
             return "429";
+        case RS431:
+            return "431";
         case RS500:
             return "500";
         case RS501:

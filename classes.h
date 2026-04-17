@@ -290,6 +290,7 @@ struct Stream
     ByteArray headers;
     ByteArray send_data;
     ByteArray post_data;
+    ByteArray rst_stream;
     ByteArray frame_win_update;
 
     int resp_status;
@@ -305,10 +306,10 @@ struct Stream
 
     long long send_bytes;
 
-    bool rst_stream;
+    bool recv_rst_stream;
+    bool send_rst_stream;
     bool create_headers;
     bool send_headers;
-    bool send_end_stream;
 
     CGI_TYPE cgi_type;
     CGI_STATUS cgi_status;
@@ -350,7 +351,7 @@ struct Stream
         clean_decode_path = NULL;
         clean_decode_path_size = 0;
         stream_window_size = 0;
-        rst_stream = create_headers = send_headers = send_end_stream = false;
+        recv_rst_stream = send_rst_stream = create_headers = send_headers = false;
         cgi.window_update = 0;
         cgi.windows_size = 0;
     }

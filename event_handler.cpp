@@ -189,15 +189,7 @@ int EventHandlerClass::http2_cgi_set(Connect *c)
                     t - resp->cgi.timer, resp->send_headers, get_cgi_status(resp->cgi_status), resp->id);
             c->h2->frame_win_update.init();
             resp->frame_win_update.init();
-            if (c->h2->try_again == true)
-                resp->rst_stream = true;
-            else
-            {/*
-                if (resp->send_headers)
-                    set_rst_stream(c, resp->id, INTERNAL_ERROR);
-                else*/
-                    resp_504(resp);
-            }
+            set_error_message(c, resp, RS504);
         }
         else
         {
@@ -216,9 +208,9 @@ int EventHandlerClass::http2_cgi_set(Connect *c)
                     {
                         print_err(c, "<%s:%d> Error cgi_create_proc()\n", __func__, __LINE__);
                         if (ret == -RS404)
-                            resp_404(resp);
+                            set_error_message(c, resp, RS404);
                         else
-                            resp_500(resp);
+                            set_error_message(c, resp, RS500);
                         continue;
                     }
                 }
@@ -227,7 +219,7 @@ int EventHandlerClass::http2_cgi_set(Connect *c)
                     int ret = fcgi_create_connect(c, resp);
                     if (ret < 0)
                     {
-                        resp_500(resp);
+                        set_error_message(c, resp, RS500);
                         continue;
                     }
                 }
@@ -236,7 +228,7 @@ int EventHandlerClass::http2_cgi_set(Connect *c)
                     int ret = scgi_create_connect(c, resp);
                     if (ret < 0)
                     {
-                        resp_500(resp);
+                        set_error_message(c, resp, RS500);
                         continue;
                     }
                 }
@@ -327,7 +319,7 @@ void EventHandlerClass::http2_cgi_poll(Connect *c, int cgi_poll_ind)
             if (resp->cgi_status == SCGI_PARAMS)
             {
                 if (scgi_worker(c, resp, cgi_poll_ind) < 0)
-                    resp_502(resp);
+                    set_error_message(c, resp, RS502);
             }
             else
                 cgi_worker(c, resp, cgi_poll_ind);
@@ -733,7 +725,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
         }
         else // con_status = PROCESSING_REQUESTS
         {
-            if (c->h2->goaway.size() || c->h2->ping.size() || c->h2->start_list_send_frame || c->h2->try_again)
+            if (c->h2->goaway.size() || c->h2->ping.size() || c->h2->try_again)
             {
                 poll_fd[num_poll].events = POLLOUT;
                 conn_array[num_poll++] = c;
@@ -759,6 +751,8 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 }
             }
 
+            if (c->h2->work_stream == NULL)
+                c->h2->work_stream = c->h2->start_stream;
             Stream *resp = c->h2->work_stream, *resp_next = NULL;
             for ( ; resp; resp = resp_next)
             {
@@ -768,12 +762,16 @@ void EventHandlerClass::http2_set_poll(Connect *c)
 
                 if (resp->frame_win_update.size() ||
                     resp->headers.size() ||
-                    resp->rst_stream ||
-                    (resp->source_data == FROM_FILE) ||
-                   (
-                      (resp->send_data.size() || (resp->buf.size_remain() && resp->send_headers)) &&
-                      (resp->stream_window_size > 0)
-                   )
+                    resp->send_rst_stream ||
+                    ((resp->source_data == DYN_PAGE) && resp->cgi.end) ||
+                    (
+                       (
+                         (resp->source_data == FROM_FILE) ||
+                         resp->send_data.size() ||
+                         (resp->buf.size_remain() && resp->send_headers)
+                       ) &&
+                       (resp->stream_window_size > 0)
+                    )
                 )
                 {
                     poll_fd[num_poll].events |= POLLOUT;

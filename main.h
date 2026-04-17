@@ -85,15 +85,6 @@ enum PROTOCOL { P_HTTP1, P_HTTP2};
 extern char **environ;
 extern const Config* const conf;
 //======================================================================
-struct FrameRedySend
-{
-    FrameRedySend *prev;
-    FrameRedySend *next;
-
-    int id;
-    ByteArray frame;
-};
-//======================================================================
 enum CHUNK_MODE { NO_CHUNK, CHUNK, CHUNK_END };
 //======================================================================
 struct http2
@@ -111,9 +102,6 @@ struct http2
     Stream *end_stream;
 
     Stream *work_stream;
-
-    FrameRedySend *start_list_send_frame;
-    FrameRedySend *end_list_send_frame;
     //-----------------------
     unsigned int body_len;
     FRAME_TYPE type;
@@ -163,8 +151,6 @@ struct http2
     int get_str(std::string& s, int *len);
     int get_header(int ind, std::string& name, std::string& val, int *len);
     int parse(Stream *r);
-    void push_to_list(FrameRedySend*);
-    void del_from_list(FrameRedySend*);
     //------------------------------------------------------------------
     const char *get_str_status()
     {
@@ -355,7 +341,7 @@ class EventHandlerClass
     int send_window_update(Connect *c, Stream *r);
     int send_frame_goawey(Connect *c);
     int send_frame_ping(Connect *c);
-    int send_frame_rststream(Connect *c);
+    int send_frame_rststream(Connect *c, Stream *r);
 
     void http1_set_poll(Connect *c);
     void http2_set_poll(Connect *c);
@@ -424,6 +410,7 @@ int get_size_sock_buf(int domain, int optname, int type, int protocol);
 int create_response_headers(Connect *c);
 int send_message(Connect *c, const char *msg);
 int read_post_data(Connect *c);
+const char *http1_status_response(int st);
 //------------------------ http1_cgi.cpp -------------------------------
 int cgi_set_size_chunk(ByteArray *ba);
 //------------------------ http2_cgi.cpp -------------------------------
@@ -477,22 +464,14 @@ void add_header(Stream *r, int ind, const char *val);
 void set_frame_window_update(Connect *c, int len);
 void set_frame_window_update(Stream *r, int len);
 void set_frame_goaway(Connect *c, HTTP2_ERRORS error);
-int set_rst_stream(Connect *c, int id, HTTP2_ERRORS error);
+void set_rst_stream(Connect *c, Stream *resp, HTTP2_ERRORS error);
 int set_response(Connect *c, Stream *r);
 SOURCE_DATA get_content_type(const char *path);
 int parse_range(const char *s, long long file_size, long long *offset, long long *content_length);
 
 void resp_204(Stream *resp);
-void resp_400(Stream *resp);
-void resp_403(Stream *resp);
-void resp_404(Stream *resp);
-void resp_411(Stream *resp);
-void resp_413(Stream *resp);
-void resp_414(Stream *resp);
-void resp_431(Stream *resp);
-void resp_500(Stream *resp);
-void resp_502(Stream *resp);
-void resp_504(Stream *resp);
+void set_error_message(Connect *c, Stream *resp, int err);
+void set_error(Stream *resp, int err);
 void hex_print_stderr(const char *s, int line, const void *p, int n);
 const char *http2_status_resonse(int st);
 //--------------------------- log.cpp ----------------------------------
