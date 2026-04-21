@@ -69,6 +69,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             {
                 if (c->h1->resp.cgi.buf_param.size() == 8)
                 {
+                    c->h1->resp.cgi.vPar.clear();
                     c->h1->resp.cgi_status = CGI_STDIN;
                     if ((c->h1->resp.post_content_len <= 0) && (c->h1->resp.post_data.size() == 0))
                     {
@@ -231,8 +232,8 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                 case FCGI_STDOUT:
                     if (c->h1->resp.create_headers == false)
                     {
-                        c->h1->resp.send_data.cat(buf, ret);
-                        fcgi_get_headers(c);
+                        c->h1->resp.buf.cat(buf, ret);
+                        http1_get_cgi_headers(c);
                     }
                     else
                     {
@@ -279,119 +280,6 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                 c->err = -RS502;
                 http1_end_request(c);
             }
-        }
-    }
-}
-//======================================================================
-void EventHandlerClass::fcgi_get_headers(Connect *c)
-{
-    const char *p1 = c->h1->resp.send_data.ptr(), *p = NULL;
-    for (unsigned int i = 0; i < c->h1->resp.send_data.size(); ++i)
-    {
-        if (*(p1++) == '\n')
-        {
-            if (*(p1) == '\r')
-            {
-                p1++;
-                if (*(p1) == '\n')
-                {
-                    p1++;
-                    p = p1;
-                    break;
-                }
-            }
-            else if (*(p1) == '\n')
-            {
-                p1++;
-                p = p1;
-                break;
-            }
-        }
-    }
-
-    if (p)
-    {
-        const char *p3 = NULL;
-        if ((p3 = strstr_case(c->h1->resp.send_data.ptr(), "Status:")))
-        {
-            sscanf(p3 + 7, "%d", &c->h1->resp.resp_status);
-            if (c->h1->resp.resp_status == RS204)
-            {
-                c->h1->chunk_mode = NO_CHUNK;
-                c->h1->resp.resp_content_len = 0;
-                if (create_response_headers(c) < 0)
-                {
-                    c->err = -1;
-                    http1_end_request(c);
-                }
-                else
-                {
-                    c->h1->resp.create_headers = true;
-                }
-                return;
-            }
-        }
-
-        if ((p3 = strstr_case(c->h1->resp.send_data.ptr(), "Content-Type:")))
-        {
-            char cont_type[64] = "NO";
-            int j = 0;
-            for (int i = 0; i < 64; ++i)
-            {
-                char ch = *(p3 + 13 + i);
-                if ((ch == ' ') && (j == 0))
-                    continue;
-                else if ((ch == '\r') || (ch == '\n'))
-                    break;
-                else
-                    cont_type[j++] = ch;
-            }
-
-            cont_type[j] = 0;
-            if (conf->PrintDebugMsg)
-                print_err(c, "<%s:%d> Content-Type: %s\n", __func__, __LINE__, cont_type);
-            c->h1->hdrs.cat_str("Content-Type: ");
-            c->h1->hdrs.cat_str(cont_type);
-            c->h1->hdrs.cat("\r\n", 2);
-            if ((p - c->h1->resp.send_data.ptr()) == c->h1->resp.send_data.size())
-            {
-                c->h1->resp.send_data.init();
-            }
-            else
-            {
-                if (c->h1->chunk_mode == CHUNK)
-                {
-                    c->h1->resp.send_data.set_offset(p - c->h1->resp.send_data.ptr() - 8);
-                    int ret = cgi_set_size_chunk(&c->h1->resp.send_data);
-                    if (ret < 0)
-                    {
-                        print_err(c, "<%s:%d> Error cgi_set_size_chunk()\n", __func__, __LINE__);
-                        c->err = -RS502;
-                        http1_end_request(c);
-                        return;
-                    }
-                }
-                else
-                    c->h1->resp.send_data.set_offset(p - c->h1->resp.send_data.ptr());
-            }
-
-            c->h1->resp.resp_status = RS200;
-            c->h1->resp.resp_content_len = -1;
-            if (create_response_headers(c) < 0)
-            {
-                c->err = -1;
-                http1_end_request(c);
-            }
-            else
-            {
-                c->h1->resp.create_headers = true;
-            }
-        }
-        else
-        {
-            print_err(c, "<%s:%d> Error \"Content-Type\" not found\n", __func__, __LINE__);
-            c->err = -RS502;
-            http1_end_request(c);
         }
     }
 }

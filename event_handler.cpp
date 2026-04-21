@@ -763,7 +763,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 if (resp->frame_win_update.size() ||
                     resp->headers.size() ||
                     resp->send_rst_stream ||
-                    ((resp->source_data == DYN_PAGE) && resp->cgi.end) ||
+                    resp->cgi.end ||
                     (
                        (
                          (resp->source_data == FROM_FILE) ||

@@ -382,6 +382,8 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
     }
     else if (resp->cgi_status == CGI_STDOUT)
     {
+        if (resp->buf.size() && resp->create_headers)
+            return;
         if (resp->cgi_type <= PHPCGI)
         {
             if (resp->cgi.from_script != fd)
@@ -431,123 +433,9 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
                     set_frame_data(resp, 0, FLAG_END_STREAM);
                 resp->cgi.end = true;
             }
-            else
+            else if (resp->create_headers == false)
             {
-                if ((!resp->send_headers) && (!resp->create_headers))
-                {
-                    const char *p1 = resp->buf.ptr(), *p = NULL;
-                    for (unsigned int i = 0; i < resp->buf.size(); ++i)
-                    {
-                        if (*(p1++) == '\n')
-                        {
-                            if (*(p1) == '\r')
-                            {
-                                p1++;
-                                if (*(p1) == '\n')
-                                {
-                                    p1++;
-                                    p = p1;
-                                    break;
-                                }
-                            }
-                            else if (*(p1) == '\n')
-                            {
-                                p1++;
-                                p = p1;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (p)
-                    {
-                        const char *p3 = NULL;
-                        if ((p3 = strstr_case(resp->buf.ptr(), "Status:")))
-                        {
-                            sscanf(p3 + 7, "%d", &resp->resp_status);
-                            if (resp->resp_status == RS204)
-                            {
-                                resp_204(resp);
-                                set_frame_data(resp, 0, FLAG_END_STREAM);
-
-                                if (resp->cgi_type <= PHPCGI)
-                                {
-                                    if (resp->cgi.from_script > 0)
-                                    {
-                                        close(resp->cgi.from_script);
-                                        resp->cgi.from_script = -1;
-                                    }
-                                }
-
-                                resp->cgi.end = true;
-                                return;
-                            }
-                        }
-
-                        string location;
-                        if ((p3 = strstr_case(resp->buf.ptr(), "Location:")))
-                        {
-                            int i = 0;
-                            for ( ; i < 512; ++i)
-                            {
-                                char ch = *(p3 + 9 + i);
-                                if ((ch == ' ') && (location.size() == 0))
-                                    continue;
-                                else if ((ch == '\r') || (ch == '\n'))
-                                    break;
-                                else
-                                    location += ch;
-                            }
-                            if (i == 512)
-                                location.clear();
-                        }
-
-                        if ((p3 = strstr_case(resp->buf.ptr(), "Content-Type:")))
-                        {
-                            char cont_type[64] = "NO";
-                            int j = 0;
-                            for (int i = 0; i < 64; ++i)
-                            {
-                                char ch = *(p3 + 13 + i);
-                                if ((ch == ' ') && (j == 0))
-                                    continue;
-                                else if ((ch == '\r') || (ch == '\n'))
-                                    break;
-                                else
-                                    cont_type[j++] = ch;
-                            }
-
-                            cont_type[j] = 0;
-                            if (conf->PrintDebugMsg)
-                                print_err(resp, "<%s:%d> Content-Type: %s, id=%d \n", __func__, __LINE__, cont_type, resp->id);
-                            set_frame_headers(resp);
-                            add_header(resp, 8, http2_status_resonse(resp->resp_status));
-                            add_header(resp, 54, conf->ServerSoftware.c_str());
-                            if (location.size())
-                                add_header(resp, 46, location.c_str());
-                            add_header(resp, 33, get_time().c_str());
-                            add_header(resp, 31, cont_type);
-                            add_header(resp, 24, "no-cache, no-store, must-revalidate");
-                            resp->create_headers = true;
-                            resp->buf.set_offset(p - resp->buf.ptr());
-                            if (resp->buf.size_remain() == 0)
-                                resp->buf.init();
-                        }
-                        else
-                        {
-                            set_error_message(c, resp, RS502);
-                        }
-                    }
-                    else
-                    {
-                        if (resp->buf.size() > 256)
-                        {
-                            print_err(resp, "<%s:%d> Error empty line not found (read from script %d bytes), id=%d \n",
-                                            __func__, __LINE__, resp->buf.size(), resp->id);
-                            set_error_message(c, resp, RS502);
-                        }
-                    }
-                }
+                http2_get_cgi_headers(c, resp);
             }
         }
         else if (revents)

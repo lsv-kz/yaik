@@ -914,6 +914,8 @@ int create_response_headers(Connect *c)
         return -1;
     }
 
+    if (conf->PrintDebugMsg)
+        print_err(c, "===================================\n%s\n", c->h1->resp.headers.ptr());
     return 0;
 }
 //======================================================================

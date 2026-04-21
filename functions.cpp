@@ -200,6 +200,8 @@ const char *get_str_frame_type(FRAME_TYPE t)
             return "ALTSVC";
         case ORIGIN: // 12 (0xC)
             return "ORIGIN";
+        case CACHE_DIGEST: // 13 0x0D,
+            return "CACHE_DIGEST";
         case PRIORITY_UPDATE: // 16 (0x10)
             return "PRIORITY_UPDATE";
     }
@@ -208,8 +210,6 @@ const char *get_str_frame_type(FRAME_TYPE t)
     {
         case 11:
             return "11 (0XB)";
-        case 13:
-            return "13 (0xD)";
         case 14:
             return "14 (0xE)";
         case 15:
@@ -585,18 +585,18 @@ int int_to_bytes(int data, int pref_len, ByteArray& buf)
     return ret;
 }
 //======================================================================
-int int_to_bytes(ByteArray& buf, int data, int pref_len, int mask)
+int int_to_bytes(ByteArray& buf, int data, int pref_len, int huff_coding_mask)
 {
     int ret = 0;
 
     if (data < (pow_(2, pref_len) - 1))
     {
-        buf.cat((data | mask));
+        buf.cat((data | huff_coding_mask));
         ++ret;
     }
     else
     {
-        buf.cat((pow_(2, pref_len) - 1) | mask);
+        buf.cat((pow_(2, pref_len) - 1) | huff_coding_mask);
         ++ret;
         data = data - (pow_(2, pref_len) - 1);
         while (data > 128)

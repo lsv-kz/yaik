@@ -325,6 +325,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             {
                 if (resp->cgi.buf_param.size() == 8)
                 {
+                    resp->cgi.vPar.clear();
                     resp->cgi_status = CGI_STDIN;
                     if ((resp->post_content_len == 0) && (resp->post_data.size() == 0))
                     {
@@ -391,7 +392,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             return;
         }
 
-        if (resp->buf.size() && resp->send_headers)
+        if (resp->buf.size() && resp->create_headers)
             return;
 
         if (resp->cgi.fcgiContentLen == 0)
@@ -463,20 +464,14 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             switch (resp->cgi.fcgi_type)
             {
                 case FCGI_STDOUT:
-                    if ((!resp->send_headers) && (!resp->create_headers))
+                    if (resp->create_headers == false)
                     {
                         resp->buf.cat(buf, ret);
-                        fcgi_get_headers(c, resp);
+                        http2_get_cgi_headers(c, resp);
                     }
                     else
                     {
-                        if (resp->buf.size())
-                            resp->buf.cat(buf, ret);
-                        else
-                        {
-                            set_frame_data(resp, ret, 0);
-                            resp->send_data.cat(buf, ret);
-                        }
+                        resp->buf.cat(buf, ret);
                     }
                     break;
                 case FCGI_STDERR:
@@ -484,11 +479,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     fprintf(stderr, "\n");
                     break;
                 case FCGI_END_REQUEST:
-                    {
-                        if (resp->buf.size() == 0)
-                            set_frame_data(resp, 0, FLAG_END_STREAM);
-                        resp->cgi.end = true;
-                    }
+                    resp->cgi.end = true;
                     break;
             }
         }
@@ -503,88 +494,184 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
     }
 }
 //======================================================================
-void EventHandlerClass::fcgi_get_headers(Connect* c, Stream *resp)
+int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
 {
-    const char *p1 = resp->buf.ptr(), *p = NULL;
-    for (unsigned int i = 0; i < resp->buf.size(); ++i)
+    const int MAX_HEADER_LEN = 512;
+    const char *p = resp->buf.ptr_remain();
+    unsigned int size = resp->buf.size_remain();
+    Param header;
+
+    for (unsigned int i = 0; i < size; )
     {
-        if (*(p1++) == '\n')
+        header.name = "";
+        header.val = "";
+
+        for ( ; i < size; )// name
         {
-            if (*(p1) == '\r')
+            if (i > MAX_HEADER_LEN)
             {
-                p1++;
-                if (*(p1) == '\n')
-                {
-                    p1++;
-                    p = p1;
-                    break;
-                }
+                print_err(resp, "<%s:%d> Error: size of header > %d bytes\n", __func__, __LINE__, i);
+                return -1;
             }
-            else if (*(p1) == '\n')
-            {
-                p1++;
-                p = p1;
+
+            char ch = *(p++);
+            ++i;
+            if (ch == ':')
                 break;
-            }
-        }
-    }
-
-    if (p)
-    {
-        const char *p3 = NULL;
-        if ((p3 = strstr_case(resp->buf.ptr(), "Status:")))
-        {
-            sscanf(p3 + 7, "%d", &resp->resp_status);
-            if (resp->resp_status == RS204)
+            else if (ch == '\r')
             {
-                set_frame_headers(resp);
-                add_header(resp, 8, "204");
-                add_header(resp, 54, conf->ServerSoftware.c_str());
-                add_header(resp, 33, get_time().c_str());
-                add_header(resp, 28, "0");
-                resp->create_headers = true;
-                resp->cgi.end = true;
-                set_frame_data(resp, 0, FLAG_END_STREAM);
-                return;
-            }
-        }
+                if (header.name.size())
+                {
+                    print_err(resp, "<%s:%d> Error\n", __func__, __LINE__);
+                    return -1;
+                }
 
-        if ((p3 = strstr_case(resp->buf.ptr(), "Content-Type:")))
-        {
-            char cont_type[64] = "NO";
-            int j = 0;
-            for (int i = 0; i < 64; ++i)
-            {
-                char ch = *(p3 + 13 + i);
-                if ((ch == ' ') && (j == 0))
-                    continue;
-                else if ((ch == '\r') || (ch == '\n'))
-                    break;
-                else
-                    cont_type[j++] = ch;
+                if (i < size)
+                {
+                    ch = *p++;
+                    ++i;
+                    if (ch == '\n')
+                    {
+                        resp->buf.set_offset(i);
+                        if (resp->buf.size_remain() == 0)
+                            resp->buf.init();
+                        return resp->cgi.vPar.size();
+                    }
+                    else
+                    {
+                        print_err(resp, "<%s:%d> Error: \\n not found\n", __func__, __LINE__);
+                        return -1;
+                    }
+                }
+                return 0;
             }
-
-            cont_type[j] = 0;
-            if (conf->PrintDebugMsg)
-                print_err(resp, "<%s:%d> Content-Type: %s, id=%d \n", __func__, __LINE__, cont_type, resp->id);
-            set_frame_headers(resp);
-            add_header(resp, 8, http2_status_resonse(resp->resp_status));
-            add_header(resp, 54, conf->ServerSoftware.c_str());
-            add_header(resp, 33, get_time().c_str());
-            add_header(resp, 31, cont_type);
-            resp->create_headers = true;
-            resp->buf.set_offset(p - resp->buf.ptr());
-            if (resp->buf.size() > resp->buf.get_offset())
+            else if (ch == '\n')
             {
-                int offs = resp->buf.get_offset();
-                set_frame_data(resp, resp->buf.size() - offs, 0);
-                resp->send_data.cat(resp->buf.ptr() + offs, resp->buf.size() - offs);
-                resp->buf.init();
+                if (header.name.size())
+                {
+                    print_err(resp, "<%s:%d> Error\n", __func__, __LINE__);
+                    return -1;
+                }
+
+                resp->buf.set_offset(i);
+                if (resp->buf.size_remain() == 0)
+                    resp->buf.init();
+                return resp->cgi.vPar.size();
+            }
+            else if (ch == 0)
+            {
+                print_err(resp, "<%s:%d> Error: character = 0\n", __func__, __LINE__);
+                return -1;
             }
             else
+                header.name += ch;
+        }
+
+        if (i == size)
+            return 0;
+        if (lower_case)
+        {
+            for (unsigned int n = 0; n < header.name.size(); ++n)
             {
-                resp->buf.init();
+                header.name[n] = tolower(header.name[n]);
             }
         }
+
+        for ( ; i < size; )// val
+        {
+            if (i > MAX_HEADER_LEN)
+            {
+                print_err(resp, "<%s:%d> Error: size of header > %d bytes\n", __func__, __LINE__, i);
+                return -1;
+            }
+
+            char ch = *(p++);
+            ++i;
+
+            if (ch == '\r')
+                continue;
+            else if (ch == '\n')
+            {
+                if ((header.name == "status") || (header.name == "Status"))
+                    sscanf(header.val.c_str(), "%d", &resp->resp_status);
+                resp->buf.set_offset(i);
+                resp->cgi.vPar.push_back(header);
+                size = resp->buf.size_remain();
+                i = 0;
+                break;
+            }
+            else if (ch == 0)
+            {
+                print_err(resp, "<%s:%d> Error: character = 0\n", __func__, __LINE__);
+                return -1;
+            }
+            else if (ch == ' ')
+            {
+                if (header.val.size())
+                    header.val += ch;
+            }
+            else
+                header.val += ch;
+        }
+
+        if (i == size)
+            return 0;
     }
+
+    return 0;
+}
+//======================================================================
+void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
+{
+    int ret = cgi_parse_headers(c, resp, true);
+    if (ret < 0)
+    {
+        print_err(resp, "<%s:%d> Error cgi_parse_headers() = -1\n", __func__, __LINE__);
+        set_error_message(c, resp, RS502);
+        return;
+    }
+    else if (ret == 0)
+    {
+        //print_err(resp, "<%s:%d> cgi_parse_headers() = 0\n", __func__, __LINE__);
+        return;
+    }
+
+    set_frame_headers(resp);
+    char str_status[32];
+    snprintf(str_status, sizeof(str_status), "%d", resp->resp_status);
+    add_header(resp, 8, str_status);
+    add_header(resp, 54, conf->ServerSoftware.c_str());
+    add_header(resp, 33, get_time().c_str());
+    
+    for (unsigned int i = 0; i < resp->cgi.vPar.size(); ++i)
+    {
+        Param header;
+        header = resp->cgi.vPar[i];
+        if (header.name == "status")
+            continue;
+        else if (header.name == "content-type")
+            add_header(resp, 31, header.val.c_str());
+        else if (header.name == "location")
+            add_header(resp, 46, header.val.c_str());
+        else
+            add_header(resp, header.name.c_str(), header.val.c_str());
+    }
+
+    if (resp->resp_status == RS204)
+    {
+        add_header(resp, 28, "0");
+        set_frame_flags(&resp->headers, FLAG_END_STREAM);
+        resp->create_headers = true;
+        resp->cgi.end = true;
+        resp->buf.init();
+        return;
+    }
+/*
+    if (resp->buf.size_remain())
+    {
+        set_frame_data(resp, resp->buf.size_remain(), 0);
+        resp->send_data.cat(resp->buf.ptr_remain(), resp->buf.size_remain());
+    }
+    resp->buf.init();*/
+    resp->create_headers = true;
 }

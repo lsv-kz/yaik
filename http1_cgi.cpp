@@ -93,7 +93,7 @@ int EventHandlerClass::cgi_stdout(Connect *c, int fd)
         if (c->h1->resp.create_headers == false)
         {
             buf[ret] = 0;
-            c->h1->resp.send_data.cat(buf, ret);
+            c->h1->resp.buf.cat(buf, ret);
         }
         else
         {
@@ -253,11 +253,9 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
             }
             else
             {
-                if ((con->h1->con_status == http1::SEND_RESP_HEADERS) &&
-                    (con->h1->resp.create_headers == false)
-                )
+                if (con->h1->resp.create_headers == false)
                 {
-                    cgi_headers_parse(con);
+                    http1_get_cgi_headers(con);
                 }
             }
         }
@@ -308,139 +306,48 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
     }
 }
 //======================================================================
-void EventHandlerClass::cgi_headers_parse(Connect *c)
+void EventHandlerClass::http1_get_cgi_headers(Connect *c)
 {
-    char s[512];
-    const char *p1 = c->h1->resp.send_data.ptr_remain();
-    int data_size = c->h1->resp.send_data.size_remain();
-    int header_len = -1;
-    int j = 0;
-    for (int i = 0; i < data_size; ++i)
+    int ret = cgi_parse_headers(c, &c->h1->resp, false);
+    if (ret < 0)
     {
-        char ch = *(p1++);
-        if (ch == '\n')
-        {
-            header_len = j;
-            s[j] = 0;
-            j = 0;
-            int offset = p1 - c->h1->resp.send_data.ptr_remain();
-            if (c->h1->resp.send_data.set_offset(offset) < 0)
-            {
-                print_err(c, "<%s:%d> Error set_offset(%d)\n", __func__, __LINE__, offset);
-                c->err = -RS502;
-                http1_end_request(c);
-                return;
-            }
-
-            if (header_len == 0)
-                break;
-
-            if (header_len >= (int)sizeof(s))
-            {
-                print_err(c, "<%s:%d> Error: data_size=%d, length header >= %d\n", __func__, __LINE__, data_size, (int)sizeof(s));
-                c->err = -RS502;
-                http1_end_request(c);
-                return;
-            }
-
-            if (memchr(s, ':', header_len) == NULL)
-            {
-                print_err(c, "<%s:%d> Error: line is not header\n", __func__, __LINE__);
-                c->err = -RS502;
-                http1_end_request(c);
-                return;
-            }
-
-            if (conf->PrintDebugMsg)
-                print_err(c, "<%s:%d> [%s]\n", __func__, __LINE__, s);
-            if (strstr_case(s, "Status:"))
-            {
-                sscanf(s + 7, "%d", &c->h1->resp.resp_status);
-                if (c->h1->resp.resp_status == RS204)
-                {
-                    if (c->h1->resp.cgi_type <= PHPCGI)
-                    {
-                        if (c->h1->resp.cgi.from_script > 0)
-                        {
-                            if (c->h1->resp.cgi.from_script > 0)
-                            {
-                                close(c->h1->resp.cgi.from_script);
-                                c->h1->resp.cgi.from_script = -1;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (c->h1->resp.cgi.fd > 0)
-                        {
-                            close(c->h1->resp.cgi.fd);
-                            c->h1->resp.cgi.fd = -1;
-                        }
-                    }
-
-                    c->h1->chunk_mode = NO_CHUNK;
-                    c->h1->resp.resp_content_len = 0;
-                    if (create_response_headers(c) < 0)
-                    {
-                        c->err = -1;
-                        http1_end_request(c);
-                    }
-                    else
-                    {
-                        c->h1->resp.create_headers = true;
-                    }
-                    return;
-                }
-            }
-            else
-            {
-                c->h1->hdrs.cat_str(s);
-                c->h1->hdrs.cat("\r\n", 2);
-            }
-
-            header_len = -1;
-        }
-        else if (ch != '\r')
-        {
-            s[j++] = ch;
-        }
-    }
-
-    if (header_len == -1)
-    {
+        print_err(c, "<%s:%d> Error cgi_parse_headers() = -1\n", __func__, __LINE__);
+        c->err = -RS502;
+        http1_end_request(c);
         return;
     }
-
-    if (c->h1->resp.send_data.size_remain() == 0)
+    else if (ret == 0)
     {
-        c->h1->resp.send_data.init();
+        print_err(c, "<%s:%d> cgi_parse_headers() = 0\n", __func__, __LINE__);
+        return;
     }
-    else
+    
+    for (unsigned int i = 0; i < c->h1->resp.cgi.vPar.size(); ++i)
     {
-        if (c->h1->chunk_mode == CHUNK)
+        Param header;
+        header = c->h1->resp.cgi.vPar[i];
+        if (header.name == "Status")
+            continue;
+        /*else if (header.name == "Content-Type")
         {
-            if (c->h1->resp.send_data.set_offset(-8) < 0)
-            {
-                print_err(c, "<%s:%d> Error set_offset(-8)\n", __func__, __LINE__);
-                c->err = -RS502;
-                http1_end_request(c);
-                return;
-            }
-
-            int ret = cgi_set_size_chunk(&c->h1->resp.send_data);
-            if (ret < 0)
-            {
-                print_err(c, "<%s:%d> Error cgi_set_size_chunk()\n", __func__, __LINE__);
-                c->err = -RS502;
-                http1_end_request(c);
-                return;
-            }
+            
+        }
+        else if (header.name == "Location")
+        {
+            
+        }
+        else*/
+        {
+            c->h1->hdrs.cat_str(header.name.c_str());
+            c->h1->hdrs.cat(": ", 2);
+            c->h1->hdrs.cat_str(header.val.c_str());
+            c->h1->hdrs.cat("\r\n", 2);
         }
     }
 
     if (c->h1->resp.resp_status == 0)
         c->h1->resp.resp_status = RS200;
-    if (c->h1->resp.httpMethod == M_HEAD)
+    if ((c->h1->resp.httpMethod == M_HEAD) || (c->h1->resp.resp_status == RS204))
     {
         c->h1->resp.cgi.end = true;
         c->h1->resp.send_data.init();
@@ -454,5 +361,24 @@ void EventHandlerClass::cgi_headers_parse(Connect *c)
     else
     {
         c->h1->resp.create_headers = true;
+    }
+
+    if (c->h1->resp.buf.size_remain() > 0)
+    {
+        if (c->h1->chunk_mode == CHUNK)
+        {
+            c->h1->resp.send_data.cpy("01234567", 8);
+            c->h1->resp.send_data.cat(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
+            int ret = cgi_set_size_chunk(&c->h1->resp.send_data);
+            if (ret < 0)
+            {
+                print_err(c, "<%s:%d> Error cgi_set_size_chunk()\n", __func__, __LINE__);
+                c->err = -RS502;
+                http1_end_request(c);
+                return;
+            }
+        }
+        else
+            c->h1->resp.send_data.cpy(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
     }
 }

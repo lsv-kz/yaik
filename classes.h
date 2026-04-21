@@ -49,6 +49,7 @@ enum FRAME_TYPE
     CONTINUATION,
     ALTSVC,
     ORIGIN = 0x0C,
+    CACHE_DIGEST = 0x0D,
     PRIORITY_UPDATE = 0x10,
 };
 
@@ -342,10 +343,10 @@ struct Stream
 
     Stream()
     {
-        numConn = 0;
-        numReq = 1;
         vhost = NULL;
         init();
+        numConn = 0;
+        numReq = 1;
         id = 0;
         Time = time(NULL);
         clean_decode_path = NULL;
@@ -440,6 +441,7 @@ struct Stream
         cgi.fd = cgi.to_script = cgi.from_script = -1;
         cgi.fcgi_type = 0;
         cgi.fcgiContentLen = cgi.fcgiPaddingLen = 0;
+        cgi.vPar.clear();
     }
 
 private:

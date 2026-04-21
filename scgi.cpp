@@ -276,6 +276,7 @@ int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             resp->cgi.buf_param.set_offset(ret);
             if (resp->cgi.buf_param.size_remain() == 0)
             {
+                resp->cgi.vPar.clear();
                 resp->cgi.buf_param.init();
                 if (resp->httpMethod == M_POST)
                 {

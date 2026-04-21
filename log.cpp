@@ -165,7 +165,9 @@ mtxLog.lock();
         }
     }
     else
+    {
         fprintf(stderr, "<%s:%d> Error buf overflow %d/%d\n", __func__, __LINE__, n, (int)sizeof(buf));
+    }
 mtxLog.unlock();
 }
 //======================================================================

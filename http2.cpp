@@ -1,6 +1,8 @@
 #include "main.h"
 
 using namespace std;
+
+const bool huff_coding = true;
 //======================================================================
 void set_frame(Stream *resp, char *s, int len, int type, HTTP2_FLAGS flags, int id)
 {
@@ -27,6 +29,12 @@ void set_frame_headers(Stream *resp)
     resp->headers.set_byte(id & 0xff, 8);
     if (resp->numReq == 1)
         resp->headers.cat(0x20);
+}
+//======================================================================
+void set_frame_flags(ByteArray *ba, int flags)
+{
+    char fl = ba->get_byte(4);
+    ba->set_byte(fl | flags, 4);
 }
 //======================================================================
 void add_header(Stream *resp, int ind)
@@ -85,7 +93,51 @@ void add_header(Stream *resp, int ind, int mask, const char *val, bool huffman)
 //======================================================================
 void add_header(Stream *resp, int ind, const char *val)
 {
-    add_header(resp, ind, hpack_mask, val, true);
+    add_header(resp, ind, hpack_mask, val, huff_coding);
+}
+//======================================================================
+void add_header(Stream *resp, const char *name, const char *val, bool huffman)
+{
+    resp->headers.cat("\x00", 1);
+    int len = (int)strlen(name);
+    if (huffman)
+    {
+        ByteArray buf;
+        buf.reserve(len);
+        huffman_encode(name, buf);
+        int_to_bytes(resp->headers, buf.size(), 7, 0x80);
+        resp->headers.cat(buf.ptr(), buf.size());
+    }
+    else
+    {
+        int_to_bytes(resp->headers, len, 7, 0);
+        resp->headers.cat(name, len);
+    }
+
+    len = (int)strlen(val);
+    if (huffman)
+    {
+        ByteArray buf;
+        buf.reserve(len);
+        huffman_encode(val, buf);
+        int_to_bytes(resp->headers, buf.size(), 7, 0x80);
+        resp->headers.cat(buf.ptr(), buf.size());
+    }
+    else
+    {
+        int_to_bytes(resp->headers, len, 7, 0);
+        resp->headers.cat(val, len);
+    }
+
+    len = resp->headers.size() - 9;
+    resp->headers.set_byte((len>>16) & 0xff, 0);
+    resp->headers.set_byte((len>>8) & 0xff, 1);
+    resp->headers.set_byte(len & 0xff, 2);
+}
+//======================================================================
+void add_header(Stream *resp, const char *name, const char *val)
+{
+    add_header(resp, name, val, huff_coding);
 }
 //======================================================================
 void set_frame_window_update(Stream *resp, int len)
@@ -1204,8 +1256,8 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
     {
         if (ret == ERR_TRY_AGAIN)
         {
-            //print_err(resp, "<%s:%d> Error send frame DATA: %d, %d, id=%d \n", __func__, __LINE__,
-            //                                    ret, resp->send_data.size(), resp->id);
+            print_err(resp, "<%s:%d> Error send frame DATA: %d, %d, id=%d \n", __func__, __LINE__,
+                                                ret, resp->send_data.size(), resp->id);
         }
         else
         {
