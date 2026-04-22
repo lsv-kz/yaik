@@ -116,6 +116,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             print_err(c, "<%s:%d> !!! Error write()=%d(%d)\n", __func__, __LINE__, ret, c->h1->resp.post_data.size_remain());
         }
 
+        c->h1->resp.post_content_len -= ret;
         c->h1->resp.post_data.set_offset(ret);
         c->h1->resp.cgi.timer = 0;
         if (c->h1->resp.post_data.size_remain() == 0)

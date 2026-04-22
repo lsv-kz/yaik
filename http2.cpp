@@ -913,7 +913,6 @@ int EventHandlerClass::parse_frame(Connect *c)
             }
         }
 
-        resp->post_content_len -= body_len;
         c->h2->cgi_window_size -= body_len;
         resp->cgi.windows_size -= body_len;
 
@@ -941,10 +940,10 @@ int EventHandlerClass::parse_frame(Connect *c)
             }
         }
 
-        if (resp->post_content_len < 0)
+        if ((resp->post_content_len - body_len) < 0)
         {
             print_err(resp, "<%s:%d> !!! Error: cont_length=%lld, body_len=%d, size=%d, id=%d \n", __func__, __LINE__,
-                        resp->post_content_len, body_len, resp->post_data.size(), resp->id);
+                        resp->post_content_len - body_len, body_len, resp->post_data.size(), resp->id);
             set_error_message(c, resp, RS500);
             return 0;
         }

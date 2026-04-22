@@ -985,7 +985,6 @@ int read_post_data(Connect *c)
         return ret;
     }
 
-    c->h1->resp.post_content_len -= ret;
     if ((c->h1->resp.cgi_type == PHPFPM) || (c->h1->resp.cgi_type == FASTCGI))
     {
         char s[8];
@@ -1002,6 +1001,14 @@ int read_post_data(Connect *c)
     {
         c->h1->resp.post_data.cat(buf, ret);
     }
+
+    if ((c->h1->resp.post_content_len - ret) < 0)
+    {
+        print_err(c, "<%s:%d> !!! Error: cont_length=%lld, post_data.size=%d\n", __func__, __LINE__,
+                    c->h1->resp.post_content_len - ret, c->h1->resp.post_data.size());
+        return -1;
+    }
+
     return ret;
 }
 //======================================================================
