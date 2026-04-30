@@ -740,16 +740,6 @@ void EventHandlerClass::http2_set_poll(Connect *c)
             }
 
             poll_fd[num_poll].events = POLLIN;
-            if (c->h2->work_stream)
-            {
-                if ((c->h2->connect_window_size <= 0) && c->h2->work_stream->send_headers)
-                {
-                    if (conf->PrintDebugMsg)
-                        print_err(c, "<%s:%d> connect_window_size <= 0\n", __func__, __LINE__);
-                    conn_array[num_poll++] = c;
-                    return;
-                }
-            }
 
             if (c->h2->work_stream == NULL)
                 c->h2->work_stream = c->h2->start_stream;
@@ -760,23 +750,26 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 if (resp_next == NULL)
                     resp_next = c->h2->start_stream;
 
-                if (resp->frame_win_update.size() ||
-                    resp->headers.size() ||
-                    resp->send_rst_stream ||
-                    resp->cgi.end ||
-                    (
-                       (
-                         (resp->source_data == FROM_FILE) ||
-                         resp->send_data.size() ||
-                         (resp->buf.size_remain() && resp->send_headers)
-                       ) &&
-                       (resp->stream_window_size > 0)
-                    )
-                )
+                if (!((c->h2->connect_window_size <= 0) && c->h2->work_stream->send_headers))
                 {
-                    poll_fd[num_poll].events |= POLLOUT;
-                    c->h2->work_stream = resp;
-                    break;
+                    if (resp->frame_win_update.size() ||
+                        resp->headers.size() ||
+                        resp->send_rst_stream ||
+                        resp->cgi.end ||
+                        (
+                           (
+                             (resp->source_data == FROM_FILE) ||
+                             resp->send_data.size() ||
+                             (resp->buf.size_remain() && resp->send_headers)
+                           ) &&
+                           (resp->stream_window_size > 0)
+                        )
+                    )
+                    {
+                        poll_fd[num_poll].events |= POLLOUT;
+                        c->h2->work_stream = resp;
+                        break;
+                    }
                 }
 
                 if (resp_next == c->h2->work_stream)

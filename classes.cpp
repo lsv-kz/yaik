@@ -9,7 +9,7 @@ http2::http2()
     header_len = id = body_len = 0;
     HTTP2_SendBufSize = 16384-9; // max size frame payload
     init_window_size = 65535;
-    connect_window_size = 0;
+    connect_window_size = 65535;
     max_frame_size = 0;
     cgi_window_update = 0;
     cgi_window_size = 0;
@@ -88,14 +88,7 @@ Stream *http2::add(unsigned long numConn, unsigned long numReq)
     resp->flags = flags;
     resp->id = id;
 
-    if (init_window_size > 0)
-    {
-        resp->stream_window_size = init_window_size;
-    }
-    else
-    {
-        resp->stream_window_size = 65535;
-    }
+    resp->stream_window_size = init_window_size;
 
     int ret = parse(resp);
     if (ret)
@@ -215,13 +208,18 @@ int http2::size()
     return num_streams;
 }
 //----------------------------------------------------------------------
-int http2::get_str(std::string& str, int *len)
+int http2::get_str(std::string& str, int *offset)
 {
     int ch;
-
-    if ((ch = body.get_byte((*len)++)) < 0)
+    if (offset == NULL)
     {
-        fprintf(stderr, "<%s:%d> Error body.get_byte()=%d\n", __func__, __LINE__, ch);
+        print_err("<%s:%d> Error: offset=NULL\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if ((ch = body.get_byte((*offset)++)) < 0)
+    {
+        print_err("<%s:%d> Error body.get_byte()=%d\n", __func__, __LINE__, ch);
         return -1;
     }
 
@@ -229,33 +227,33 @@ int http2::get_str(std::string& str, int *len)
     int val_len = ch & 0x7f;
     if (val_len == 0x7f)
     {
-        val_len = bytes_to_int(val_len, 7, body.ptr(), len, body.size());
+        val_len = bytes_to_int(val_len, 7, body.ptr(), body.size(), offset);
         if (val_len <= 0)
         {
-            fprintf(stderr, "<%s:%d> Error bytes_to_int()=%d\n", __func__, __LINE__, val_len);
+            print_err("<%s:%d> Error bytes_to_int()=%d\n", __func__, __LINE__, val_len);
             return -1;
         }
     }
 
-    if ((val_len + *len) > (int)body.size())
+    if ((val_len + *offset) > (int)body.size())
     {
-        fprintf(stderr, "<%s:%d> Error out of range [%d > %d]\n", __func__, __LINE__, val_len + *len, body.size());
+        print_err("<%s:%d> Error out of range [%d > %d]\n", __func__, __LINE__, val_len + *offset, body.size());
         return -1;
     }
 
     if (huffman)
-        huffman_decode(body.ptr() + *len, val_len, str);
+        huffman_decode(body.ptr() + *offset, val_len, str);
     else
-        str.assign(body.ptr() + *len, val_len);
-    (*len) += val_len;
+        str.assign(body.ptr() + *offset, val_len);
+    (*offset) += val_len;
     return 0;
 }
 //----------------------------------------------------------------------
-int http2::get_header(int ind, std::string& name, std::string& val, int *len)
+int http2::get_header(int ind, std::string& name, std::string& val, int *offset)
 {
-    if ((ind == 0x00) && len)
+    if (ind == 0x00)
     {
-        if (get_str(name, len) < 0)
+        if (get_str(name, offset) < 0)
             return -1;
     }
     else
@@ -268,7 +266,7 @@ int http2::get_header(int ind, std::string& name, std::string& val, int *len)
                 if (hd)
                 {
                     name = hd->name;
-                    if (len == NULL)
+                    if (offset == NULL)
                         val = hd->val;
                 }
                 else
@@ -279,19 +277,20 @@ int http2::get_header(int ind, std::string& name, std::string& val, int *len)
             else
             {
                 print_err("<%s:%d> ind=%d Dynamic Table is not created\n", __func__, __LINE__, ind);
+                return -1;
             }
         }
         else
         {
             name = static_tab[ind][0];
-            if (len == NULL)
+            if (offset == NULL)
                 val = static_tab[ind][1];
         }
     }
 
-    if (len)
+    if (offset)
     {
-        if (get_str(val, len) < 0)
+        if (get_str(val, offset) < 0)
             return -1;
     }
 
@@ -318,23 +317,23 @@ int http2::parse(Stream *r)
 
         if ((ch = body.get_byte(offset++)) < 0)
         {
-            fprintf(stderr, "<%s:%d> Error ch=%d, 0x%X\n", __func__, __LINE__, ch, ch);
+            print_err("<%s:%d> Error ch=%d, 0x%X\n", __func__, __LINE__, ch, ch);
             return -1;
         }
 
         if (ch > 0x80)
         {// <0x81 ... 0xFF> ; static table: [0x81 ... 0x3D], dynamic table: [0x3E ...]
-            int ind = bytes_to_int(ch & 0x7f, 7, body.ptr(), &offset, body.size());
+            int ind = bytes_to_int(ch & 0x7f, 7, body.ptr(), body.size(), &offset);
             if (get_header(ind, name, val, NULL) < 0)
                 return -1;
         }
         else if ((ch >= 0x40) && (ch <= 0x7f))
         {// <0x40><len><name><len><val>, <0x41 ... 0x7F><index><len><val> ---> dyn_tab
-            int ind = bytes_to_int(ch & 0x3f, 6, body.ptr(), &offset, body.size());
+            int ind = bytes_to_int(ch & 0x3f, 6, body.ptr(), body.size(), &offset);
             if (get_header(ind, name, val, &offset) < 0)
                 return -1;
             if (conf->PrintDebugMsg)
-                fprintf(stderr, "<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
+                print_err("<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
             if ((conf->HeaderTableSize > 0) && dyn_tab)
             {
                 if (dyn_tab->add(name, val) < 0)
@@ -343,30 +342,30 @@ int http2::parse(Stream *r)
         }
         else if ((ch >= 0x00) && (ch <= 0x0f))
         {// <0x00><len><name><len><val>, <0x01 ... 0x0F><index><len><val>
-            int ind = bytes_to_int(ch, 4, body.ptr(), &offset, body.size());
+            int ind = bytes_to_int(ch, 4, body.ptr(), body.size(), &offset);
             if (get_header(ind, name, val, &offset) < 0)
                 return -1;
         }
         else if ((ch >= 0x10) && (ch <= 0x1f))
         {// <0x10><len><name><len><val>, <0x11 ... 0x1F><index><len><val>
-            int ind = bytes_to_int(ch & 0x0f, 4, body.ptr(), &offset, body.size());
+            int ind = bytes_to_int(ch & 0x0f, 4, body.ptr(), body.size(), &offset);
             if (get_header(ind, name, val, &offset) < 0)
                 return -1;
         }
         else if ((ch >= 0x20) && (ch <= 0x3f))
         {// Dynamic Table Size Update
-            int size = bytes_to_int(ch & 0x1f, 5, body.ptr(), &offset, body.size());
-            fprintf(stderr, "[%lu/%lu] <%s:%d>--- Dynamic Table Size Update: %d ---\n", r->numConn, r->numReq, __func__, __LINE__, size);
+            int size = bytes_to_int(ch & 0x1f, 5, body.ptr(), body.size(), &offset);
+            print_err("[%lu/%lu] <%s:%d>--- Dynamic Table Size Update: %d ---\n", r->numConn, r->numReq, __func__, __LINE__, size);
             continue;
         }
         else
         {
-            fprintf(stderr, "<%s:%d> !!! 0x%02X\n", __func__, __LINE__, ch);
+            print_err("<%s:%d> !!! 0x%02X\n", __func__, __LINE__, ch);
             return -1;
         }
 
         if (conf->PrintDebugMsg)
-            fprintf(stderr, "[%lu/%lu] <%s:%d> [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, name.c_str(), val.c_str());
+            print_err("[%lu/%lu] <%s:%d> [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, name.c_str(), val.c_str());
 
         if (name == ":method")
         {
@@ -388,7 +387,7 @@ int http2::parse(Stream *r)
         else if (name == "range")
         {
             if (conf->PrintDebugMsg)
-                fprintf(stderr, "<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
+                print_err("<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
             r->range = val;
         }
         else if (name == ":authority")
@@ -413,7 +412,7 @@ int http2::parse(Stream *r)
         else
         {
             if (conf->PrintDebugMsg)
-                fprintf(stderr, "<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
+                print_err("<%s:%d> [%s: %s]\n", __func__, __LINE__, name.c_str(), val.c_str());
         }
     }
 
@@ -446,7 +445,7 @@ int DynamicTable::add(std::string& name, std::string& val)
 
     if (headers_num >= max_headers_num)
     {
-        fprintf(stderr, "<%s:%d> Error headers_num(%d) >= max_headers_num(%d)\n", __func__, __LINE__, 
+        print_err("<%s:%d> Error headers_num(%d) >= max_headers_num(%d)\n", __func__, __LINE__, 
                         headers_num, max_table_size);
         return -1;
     }

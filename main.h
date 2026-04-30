@@ -442,7 +442,7 @@ const char *strstr_case(const char * s1, const char *s2);
 int strlcmp_case(const char *s1, const char *s2, int len);
 int strcmp_case(const char *s1, const char *s2);
 int pow_(int x, int y);
-int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int *len, int size);
+int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int size, int *len);
 int int_to_bytes(ByteArray& buf, int data, int pref_len, int mask);
 
 HTTP_METHOD get_int_method(const char *s);

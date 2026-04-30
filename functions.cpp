@@ -537,7 +537,7 @@ long long file_size(const char *s)
         return -1;
 }
 //======================================================================
-int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int *len, int size)
+int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int size, int *len)
 {
     int data = pow_(2, pref_len) - 1;
     if (prefix < data)

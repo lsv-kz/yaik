@@ -85,9 +85,6 @@ void print_err(const char *format, ...)
         return;
     }
 
-    str.cpy("[", 1);
-    str.cat_logtime();
-    str.cat("] - ", 4);
     str.cat_str(buf);
 
 mtxLog.lock();

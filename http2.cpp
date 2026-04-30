@@ -809,10 +809,11 @@ int EventHandlerClass::parse_frame(Connect *c)
                 }
                 else if (c->h2->body.get_byte(ind + 1) == 4)
                 {
-                    c->h2->init_window_size = (unsigned char)c->h2->body.get_byte(ind + 5);
-                    c->h2->init_window_size += ((unsigned char)c->h2->body.get_byte(ind + 4)<<8);
-                    c->h2->init_window_size += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
-                    c->h2->init_window_size += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
+                    long n = (unsigned char)c->h2->body.get_byte(ind + 5);
+                    n += ((unsigned char)c->h2->body.get_byte(ind + 4)<<8);
+                    n += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
+                    n += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
+                    c->h2->init_window_size = c->h2->init_window_size - 65535 + n;
                     if (conf->PrintDebugMsg)
                         print_err(c, "<%s:%d> SETTINGS_INITIAL_WINDOW_SIZE [%ld] id=%d \n",
                                         __func__, __LINE__, c->h2->init_window_size, 0);
@@ -832,7 +833,6 @@ int EventHandlerClass::parse_frame(Connect *c)
                 }
             }
 
-            c->h2->connect_window_size += c->h2->init_window_size;
             c->h2->recv_settings = true;
             if (c->h2->settings.size() == 0)
                 c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
@@ -1044,13 +1044,13 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             c->h2->connect_window_size += n;
             if (conf->PrintDebugMsg)
-                print_err(c, "<%s:%d> WINDOW_UPDATE %ld[%ld] id=%d \n", __func__, __LINE__, n, c->h2->connect_window_size, c->h2->id);
+                print_err("[%lu] WINDOW_UPDATE %ld[%ld] id=%d \n", c->numConn, n, c->h2->connect_window_size, c->h2->id);
         }
         else
         {
             c->h2->set_window_size(c->numConn, c->h2->id, n);
             if (conf->PrintDebugMsg)
-                print_err(c, "<%s:%d> WINDOW_UPDATE %ld id=%d \n", __func__, __LINE__, n, c->h2->id);
+                print_err("[%lu] WINDOW_UPDATE %ld id=%d \n", c->numConn, n, c->h2->id);
         }
     }
     else if (c->h2->type == PRIORITY)
@@ -1164,7 +1164,7 @@ int EventHandlerClass::send_frames_(Connect *c)
                 return ret;
         }
 
-        if (resp->send_headers)
+        if ((resp->send_headers) && (c->h2->connect_window_size > 0))
         {
             int ret = send_frame_data(c, resp);
             if (ret <= 0)
@@ -1255,8 +1255,8 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
     {
         if (ret == ERR_TRY_AGAIN)
         {
-            print_err(resp, "<%s:%d> Error send frame DATA: %d, %d, id=%d \n", __func__, __LINE__,
-                                                ret, resp->send_data.size(), resp->id);
+            //print_err(resp, "<%s:%d> Error send frame DATA: %d, %d, id=%d \n", __func__, __LINE__,
+            //                                    ret, resp->send_data.size(), resp->id);
         }
         else
         {
@@ -1279,18 +1279,12 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
         c->h2->connect_window_size -= (resp->send_data.size() - 9);
     }
 
-    if (conf->PrintDebugMsg)
-    {
-        print_err(resp, "<%s:%d> send frame DATA: %d, send_bytes=%lld, id=%d \n", __func__, __LINE__,
-                                                ret, resp->send_bytes, resp->id);
-    }
-
     if ((resp->send_data.get_byte(4) & FLAG_END_STREAM) || resp->recv_rst_stream)
     {
         if (conf->PrintDebugMsg)
         {
-            print_err(resp, "<%s:%d>... send frame DATA, flag=0x%02X, send %lld bytes, recv_rst_stream=%d ... id=%d \n",
-                        __func__, __LINE__, resp->send_data.get_byte(4), resp->send_bytes, resp->recv_rst_stream, resp->id);
+            print_err(resp, "~ send DATA: %d, flag=0x%02X, %lld, %ld/%ld, id=%d \n", ret, resp->send_data.get_byte(4),
+                        resp->send_bytes, c->h2->connect_window_size, resp->stream_window_size, resp->id);
         }
 
         print_log(c, resp);
@@ -1299,6 +1293,11 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
     }
     else
     {
+        if (conf->PrintDebugMsg)
+        {
+            print_err(resp, "send DATA: %d, %lld, %ld/%ld, id=%d\n", ret, resp->send_bytes, 
+                        c->h2->connect_window_size, resp->stream_window_size, resp->id);
+        }
         resp->send_data.init();
         if (resp->send_rst_stream)
             return 0;
