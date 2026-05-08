@@ -51,7 +51,6 @@ void create_conf_file(const char *path)
     "PrintDebugMsg        off       # on, off\n\n"
     "ServerSoftware       ?\n\n"
     "LogPath              ?\n"
-    "PidFilePath          ?\n\n"
     "server {\n"
     "    ip             0.0.0.0\n"
     "    ServerPort     80\n"
@@ -338,8 +337,6 @@ int read_conf_file(FILE *fconf)
                 c.ScriptPath = s2;
             else if (!strcmp(s1, "LogPath"))
                 c.LogPath = s2;
-            else if (!strcmp(s1, "PidFilePath"))
-                c.PidFilePath = s2;
             else if ((!strcmp(s1, "MaxCgiProc")) && is_number(s2))
                 c.MaxCgiProc = atoi(s2);
             else if ((!strcmp(s1, "Timeout")) && is_number(s2))
@@ -633,12 +630,6 @@ int read_conf_file(FILE *fconf)
     {
         c.ScriptPath = "";
         fprintf(stderr, "<%s:%d> !!! Error ScriptPath [%s]\n", __func__, __LINE__, conf->ScriptPath.c_str());
-    }
-    //------------------------------------------------------------------
-    if (check_path(c.PidFilePath) == -1)
-    {
-        fprintf(stderr, "<%s:%d> !!! Error PidFilePath [%s]\n", __func__, __LINE__, conf->PidFilePath.c_str());
-        return -1;
     }
     //------------------------------------------------------------------
     if (conf->MaxCgiProc <= 0)

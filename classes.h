@@ -152,7 +152,6 @@ public:
     std::string DocumentRoot;
     std::string ScriptPath;
     std::string LogPath;
-    std::string PidFilePath;
 
     std::string UsePHP;
     std::string PathPHP;
@@ -197,6 +196,9 @@ public:
         fcgi_list = NULL;
         num_servers = 0;
         all_servers = NULL;
+
+        MaxConcurrentStreams = 50;
+        HeaderTableSize = 0;
     }
 
     ~Config()
@@ -490,7 +492,10 @@ public:
             err = 1;
             return;
         }
-        fprintf(stderr, "<%s:%d> table_size=%d, max_headers_num=%d, offset=%d\n", __func__, __LINE__, max_table_size, max_headers_num, offset);
+
+        if (conf->PrintDebugMsg)
+            fprintf(stderr, "<%s:%d> table_size=%d, max_headers_num=%d, offset=%d\n", __func__, __LINE__, max_table_size, max_headers_num, offset);
+
         table[0].name = NULL;
         table[0].val = NULL;
     }

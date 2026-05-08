@@ -720,7 +720,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
         else if (c->h2->con_status == http2::SET_SETTINGS)
         {
             poll_fd[num_poll].events = POLLIN;
-            if (c->h2->settings.size_remain())
+            if (c->h2->settings.size_remain() || c->h2->goaway.size_remain())
                 poll_fd[num_poll].events |= POLLOUT;
         }
         else // con_status = PROCESSING_REQUESTS

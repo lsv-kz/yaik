@@ -37,6 +37,18 @@ void set_frame_flags(ByteArray *ba, int flags)
     ba->set_byte(fl | flags, 4);
 }
 //======================================================================
+int get_frame_id(ByteArray *ba)
+{
+    if (ba == NULL)
+        return -1;
+    int id = 0;
+    id = (ba->get_byte(5) & 0x7f)<<24;
+    id = id | ba->get_byte(6)<<16;
+    id = id | ba->get_byte(7)<<8;
+    id = id | ba->get_byte(8);
+    return id;
+}
+//======================================================================
 void add_header(Stream *resp, int ind)
 {
     if ((ind >= 8) && (ind <= 14))
@@ -140,7 +152,7 @@ void add_header(Stream *resp, const char *name, const char *val)
     add_header(resp, name, val, huff_coding);
 }
 //======================================================================
-void set_frame_window_update(Stream *resp, int len)
+void set_frame_window_update(Stream *resp, unsigned int len)// post data
 {
     int id = resp->id;
     char s[] = "\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
@@ -159,10 +171,10 @@ void set_frame_window_update(Stream *resp, int len)
     resp->frame_win_update.set_byte(id & 0xff, 8);
 }
 //======================================================================
-void set_frame_window_update(Connect *c, int len)
+void set_frame_window_update(Connect *c, unsigned int len)// post data
 {
     c->h2->frame_win_update.cpy("\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
-                               "\x00\x00\x00\x00", 13);              // 9-12
+                               "\x00\x00\x00\x00", 13);                 // 9-12
 
     c->h2->frame_win_update.set_byte((len>>24) & 0x7f, 9);
     c->h2->frame_win_update.set_byte((len>>16) & 0xff, 10);
@@ -243,6 +255,9 @@ int set_frame_data(Connect *c, Stream *resp)
             unsigned int len = resp->buf.size_remain();
             if (len > c->h2->HTTP2_SendBufSize)
                 len = c->h2->HTTP2_SendBufSize;
+            if (len > min_window_size)
+                len = min_window_size;
+
             set_frame_data(resp, len, 0);
             resp->send_data.cat(resp->buf.ptr_remain(), len);
             resp->buf.set_offset(len);
@@ -813,7 +828,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                     n += ((unsigned char)c->h2->body.get_byte(ind + 4)<<8);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 3)<<16);
                     n += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
-                    c->h2->init_window_size = c->h2->init_window_size - 65535 + n;
+                    c->h2->init_window_size = n;
                     if (conf->PrintDebugMsg)
                         print_err(c, "<%s:%d> SETTINGS_INITIAL_WINDOW_SIZE [%ld] id=%d \n",
                                         __func__, __LINE__, c->h2->init_window_size, 0);
@@ -1042,12 +1057,24 @@ int EventHandlerClass::parse_frame(Connect *c)
 
         if (c->h2->id == 0)
         {
+            if (n < 0)
+            {
+                print_err(c, "<%s:%d> connect_window_size=%ld, n=%ld\n", __func__, __LINE__, c->h2->connect_window_size, n);
+                return -1;
+            }
+
             c->h2->connect_window_size += n;
             if (conf->PrintDebugMsg)
                 print_err("[%lu] WINDOW_UPDATE %ld[%ld] id=%d \n", c->numConn, n, c->h2->connect_window_size, c->h2->id);
         }
         else
         {
+            if (n < 0)
+            {
+                print_err(c, "<%s:%d> stream_window_size=%ld, n=%ld, id=%d\n", __func__, __LINE__, c->h2->connect_window_size, n, c->h2->id);
+                return -1;
+            }
+
             c->h2->set_window_size(c->numConn, c->h2->id, n);
             if (conf->PrintDebugMsg)
                 print_err("[%lu] WINDOW_UPDATE %ld id=%d \n", c->numConn, n, c->h2->id);
@@ -1090,6 +1117,9 @@ int EventHandlerClass::send_frames_(Connect *c)
 {
     if (c->h2->con_status == http2::SET_SETTINGS)
     {
+        if (c->h2->goaway.size_remain())
+            return send_frame_goawey(c);
+
         if (c->h2->settings.size() == 0)
         {
             print_err(c, "<%s:%d> !!! SEND_SETTINGS Error: settings.size() = 0\n", __func__, __LINE__);
@@ -1403,6 +1433,10 @@ int EventHandlerClass::send_frame_rststream(Connect *c, Stream *resp)
         if (ret != ERR_TRY_AGAIN)
         {
             print_err(resp, "<%s:%d> Error send frame RST_STREAM, id=%d \n", __func__, __LINE__, resp->id);
+        }
+        else
+        {
+            print_err(resp, "<%s:%d> Error ERR_TRY_AGAIN send frame RST_STREAM, id=%d \n", __func__, __LINE__, resp->id);
         }
         return ret;
     }
