@@ -110,9 +110,15 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
 
         if (resp->cgi_type == CGI)
         {
-            execl(resp->cgi.path.c_str(), base_name(resp->cgi.path.c_str()), NULL);
+            if (chdir(conf->ScriptPath.c_str()))
+            {
+                fprintf(stderr, "<%s:%d> Error chdir(%s): %s\n", __func__, __LINE__, conf->ScriptPath.c_str(), strerror(errno));
+                goto to_pipe;
+            }
+
+            execl(get_script_name(resp->clean_decode_path) + 1, base_name(resp->cgi.path.c_str()), NULL);
             print_err(resp, "<%s:%d> Error execl(%s, %s): %s\n", __func__, __LINE__,
-                        resp->cgi.path.c_str(), base_name(resp->clean_decode_path), strerror(errno));
+                        get_script_name(resp->clean_decode_path) + 1, base_name(resp->clean_decode_path), strerror(errno));
         }
         else if (resp->cgi_type == PHPCGI)
         {
@@ -159,7 +165,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
                 serv_cgi[0] = -1;
             }
 
-            if (resp->post_content_len <= 0)
+            if ((resp->post_content_len <= 0) && (resp->post_data.size() == 0))
             {
                 resp->cgi_status = CGI_STDOUT;
                 close(serv_cgi[1]);
@@ -239,7 +245,10 @@ int EventHandlerClass::cgi_stdin(Stream *resp, int fd)
     if (ret <= 0)
     {
         if (errno == EAGAIN)
+        {
+            print_err(resp, "<%s:%d> Error write(): EAGAIN; id=%d \n", __func__, __LINE__, resp->id);
             return ERR_TRY_AGAIN;
+        }
         else
         {
             print_err(resp, "<%s:%d> Error write()=%d: %s; id=%d \n", __func__, __LINE__, ret, strerror(errno), resp->id);
@@ -248,7 +257,6 @@ int EventHandlerClass::cgi_stdin(Stream *resp, int fd)
     }
 
     resp->cgi.timer = 0;
-    resp->post_content_len -= ret;
     resp->post_data.set_offset(ret);
     if (resp->post_data.size_remain() == 0)
     {
@@ -423,15 +431,26 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             else if (ret == 0)
             {
                 if (resp->buf.size())
+                {
+                    print_err(resp, "<%s:%d> Error cgi_stdout()=%d, id=%d \n", __func__, __LINE__, ret, resp->id);
+                    set_error_message(c, resp, RS502);
                     return;
+                }
+
                 if (resp->cgi_type <= PHPCGI)
                 {
                     close(resp->cgi.from_script);
                     resp->cgi.from_script = -1;
                 }
+                else
+                {
+                    if (resp->cgi.fd > 0)
+                    {
+                        close(resp->cgi.fd);
+                        resp->cgi.fd = -1;
+                    }
+                }
 
-                if (resp->buf.size() == 0)
-                    set_frame_data(resp, 0, FLAG_END_STREAM);
                 resp->cgi.end = true;
             }
             else if (resp->create_headers == false)
@@ -455,9 +474,7 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->buf.init();
-            if (resp->send_headers)
-                set_frame_data(resp, 0, FLAG_END_STREAM);
-            else
+            if (resp->send_headers == false)
             {
                 print_err(resp, "<%s:%d> Error 502 Bad Gateway, revents=0x%02X, id=%d \n",
                             __func__, __LINE__, revents, resp->id);

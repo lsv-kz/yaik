@@ -464,15 +464,9 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             switch (resp->cgi.fcgi_type)
             {
                 case FCGI_STDOUT:
+                    resp->buf.cat(buf, ret);
                     if (resp->create_headers == false)
-                    {
-                        resp->buf.cat(buf, ret);
                         http2_get_cgi_headers(c, resp);
-                    }
-                    else
-                    {
-                        resp->buf.cat(buf, ret);
-                    }
                     break;
                 case FCGI_STDERR:
                     fwrite(buf, 1, ret, stderr);
@@ -506,7 +500,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
         header.name = "";
         header.val = "";
 
-        for ( ; i < size; )// name
+        for ( ; i < size; ) // name
         {
             if (i > MAX_HEADER_LEN)
             {
@@ -530,7 +524,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                 {
                     ch = *p++;
                     ++i;
-                    if (ch == '\n')
+                    if (ch == '\n') // empty line
                     {
                         resp->buf.set_offset(i);
                         if (resp->buf.size_remain() == 0)
@@ -543,9 +537,10 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                         return -1;
                     }
                 }
+
                 return 0;
             }
-            else if (ch == '\n')
+            else if (ch == '\n') // empty line
             {
                 if (header.name.size())
                 {
@@ -577,7 +572,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
             }
         }
 
-        for ( ; i < size; )// val
+        for ( ; i < size; ) // value
         {
             if (i > MAX_HEADER_LEN)
             {
@@ -595,8 +590,10 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                 if ((header.name == "status") || (header.name == "Status"))
                     sscanf(header.val.c_str(), "%d", &resp->resp_status);
                 resp->buf.set_offset(i);
-                resp->cgi.vPar.push_back(header);
+                resp->cgi.vPar.push_back(header); // add header
                 size = resp->buf.size_remain();
+                if (resp->buf.size_remain() == 0)
+                    resp->buf.init();
                 i = 0;
                 break;
             }
@@ -642,7 +639,7 @@ void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
     add_header(resp, 8, str_status);
     add_header(resp, 54, conf->ServerSoftware.c_str());
     add_header(resp, 33, get_time().c_str());
-    
+
     for (unsigned int i = 0; i < resp->cgi.vPar.size(); ++i)
     {
         Param header;
@@ -666,12 +663,8 @@ void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
         resp->buf.init();
         return;
     }
-/*
-    if (resp->buf.size_remain())
-    {
-        set_frame_data(resp, resp->buf.size_remain(), 0);
-        resp->send_data.cat(resp->buf.ptr_remain(), resp->buf.size_remain());
-    }
-    resp->buf.init();*/
+
+    if (resp->buf.size_remain() == 0)
+        resp->buf.init();
     resp->create_headers = true;
 }

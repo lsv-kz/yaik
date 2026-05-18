@@ -91,7 +91,7 @@ struct VHost
     std::string hostname;
     std::string DocumentRoot;
 
-    SSL_CTX* ctx;
+    SSL_CTX *ctx;
 
     std::string Certificate;
     std::string CertificateKey;
@@ -340,7 +340,7 @@ struct Stream
         int fcgiPaddingLen;
         //-----------------------
         long window_update;
-        long windows_size;
+        long window_size;
     } cgi;
 
     Stream()
@@ -356,7 +356,7 @@ struct Stream
         stream_window_size = 0;
         recv_rst_stream = send_rst_stream = create_headers = send_headers = false;
         cgi.window_update = 0;
-        cgi.windows_size = 0;
+        cgi.window_size = 65535;
     }
 
     ~Stream()

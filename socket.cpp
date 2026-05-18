@@ -255,7 +255,7 @@ int peek(Connect *c, char *buf, int len)
                 return ERR_TRY_AGAIN;
             else
             {
-                fprintf(stderr, "<%s:%d> Error recv(): %s\n", __func__, __LINE__, strerror(errno));
+                print_err(c, "Error recv(MSG_PEEK): %s\n", strerror(errno));
                 return -1;
             }
         }

@@ -716,7 +716,10 @@ int EventHandlerClass::recv_frame(Connect *c)
     {
         if (ret == ERR_TRY_AGAIN)
             return 0;
-        ssl_shutdown(c);
+        if (ret == 0)
+            close_connect(c);
+        else
+            ssl_shutdown(c);
         return -1;
     }
 
@@ -841,7 +844,6 @@ int EventHandlerClass::parse_frame(Connect *c)
                     n += ((unsigned char)c->h2->body.get_byte(ind + 2)<<24);
                     if (n < c->h2->HTTP2_SendBufSize)
                         c->h2->HTTP2_SendBufSize = n;
-
                     if (conf->PrintDebugMsg)
                         print_err(c, "<%s:%d> SETTINGS_MAX_FRAME_SIZE [%ld], HTTP2_SendBufSize=%u, id=0 \n",
                                         __func__, __LINE__, n, c->h2->HTTP2_SendBufSize);
@@ -865,8 +867,9 @@ int EventHandlerClass::parse_frame(Connect *c)
             else
             {
                 print_err(c, "<%s:%d> frame SETTINGS: size=0, flags=0\n", __func__, __LINE__);
-                set_frame_goaway(c, CANCEL);
-                return 0;
+                c->h2->recv_settings = true;
+                if (c->h2->settings.size() == 0)
+                    c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
             }
         }
     }
@@ -923,16 +926,15 @@ int EventHandlerClass::parse_frame(Connect *c)
         {
             if (body_len < 100)
             {
-                print_err(resp, "<%s:%d> recv DATA %d, con.cgi_window_size=%ld, stream.cgi_windows_size=%ld, id=%d \n",
-                                __func__, __LINE__, body_len, c->h2->cgi_window_size, resp->cgi.windows_size, resp->id);
+                print_err(resp, "<%s:%d> recv DATA %d, con.cgi_window_size=%ld, stream.cgi_window_size=%ld, id=%d \n",
+                                __func__, __LINE__, body_len, c->h2->cgi_window_size, resp->cgi.window_size, resp->id);
             }
         }
 
-        c->h2->cgi_window_size -= body_len;
-        resp->cgi.windows_size -= body_len;
+        resp->post_content_len -= body_len;
 
-        c->h2->cgi_window_update += body_len;
-        resp->cgi.window_update += body_len;
+        c->h2->cgi_window_size -= body_len;
+        resp->cgi.window_size -= body_len;
 
         if ((resp->cgi_type <= PHPCGI) || (resp->cgi_type == SCGI))
         {
@@ -955,10 +957,10 @@ int EventHandlerClass::parse_frame(Connect *c)
             }
         }
 
-        if ((resp->post_content_len - body_len) < 0)
+        if (resp->post_content_len < 0)
         {
-            print_err(resp, "<%s:%d> !!! Error: cont_length=%lld, body_len=%d, size=%d, id=%d \n", __func__, __LINE__,
-                        resp->post_content_len - body_len, body_len, resp->post_data.size(), resp->id);
+            print_err(resp, "<%s:%d> !!! Error: cont_length=%lld, size=%d, id=%d \n", __func__, __LINE__,
+                        resp->post_content_len, resp->post_data.size(), resp->id);
             set_error_message(c, resp, RS500);
             return 0;
         }
@@ -1140,15 +1142,18 @@ int EventHandlerClass::send_frames_(Connect *c)
             return send_frame_ping(c);
         }
 
-        if (c->h2->frame_win_update.size() || (c->h2->cgi_window_update > 0))
+        if (c->h2->frame_win_update.size() || (c->h2->cgi_window_size < 16384))
         {
-            if (c->h2->cgi_window_update > 32000)
+            if (c->h2->cgi_window_size < 0)
             {
-                print_err(c, "<%s:%d> !!! c->h2->server_window_size(%ld) > 32000\n", __func__, __LINE__, c->h2->cgi_window_update);
+                print_err(c, "<%s:%d> !!! c->h2->cgi_window_size=%ld\n", __func__, __LINE__, c->h2->cgi_window_size);
             }
 
             if (c->h2->frame_win_update.size() == 0)
+            {
+                c->h2->cgi_window_update = 65535 - c->h2->cgi_window_size;
                 set_frame_window_update(c, c->h2->cgi_window_update);
+            }
             int ret = send_window_update(c);
             if (ret < 0)
                 return ret;
@@ -1172,16 +1177,19 @@ int EventHandlerClass::send_frames_(Connect *c)
             return send_frame_rststream(c, resp);
         }
 
-        if (resp->frame_win_update.size() || (resp->cgi.window_update > 0))
+        if (resp->frame_win_update.size() || (resp->cgi.window_size < 16384))
         {
-            if (resp->cgi.window_update > 32000)
+            if (resp->cgi.window_size < 0)
             {
                 if (conf->PrintDebugMsg)
-                    print_err(resp, "<%s:%d> ??? resp->cgi.window_update(%ld) > 32000\n", __func__, __LINE__, resp->cgi.window_update);
+                    print_err(resp, "<%s:%d> ??? resp->cgi.window_size=%ld\n", __func__, __LINE__, resp->cgi.window_size);
             }
 
             if (resp->frame_win_update.size() == 0)
+            {
+                resp->cgi.window_update = 65535 - resp->cgi.window_size;
                 set_frame_window_update(resp, resp->cgi.window_update);
+            }
             int ret = send_window_update(c, resp);
             if (ret < 0)
                 return ret;
@@ -1255,6 +1263,7 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
                 print_err(resp, "<%s:%d> send frame HEADERS: %d, id=%d \n", __func__, __LINE__, ret, resp->id);
                 hex_print_stderr(__func__, __LINE__, resp->headers.ptr(), resp->headers.size());
             }
+
             resp->headers.init();
             if (resp->send_rst_stream)
                 return 0;
@@ -1486,7 +1495,7 @@ int EventHandlerClass::send_window_update(Connect *c, Stream *resp)
     resp->frame_win_update.set_offset(ret);
     if (resp->frame_win_update.size_remain())
         return ERR_TRY_AGAIN;
-    resp->cgi.windows_size += resp->cgi.window_update;
+    resp->cgi.window_size += resp->cgi.window_update;
     resp->cgi.window_update = 0;
     resp->frame_win_update.init();
     return 0;

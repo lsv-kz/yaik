@@ -2,9 +2,6 @@
 
 using namespace std;
 //======================================================================
-const char *get_script_name(const char *name);
-const char *base_name(const char *path);
-//======================================================================
 void kill_chld(pid_t pid)
 {
     if (pid > 0)
@@ -321,7 +318,7 @@ void EventHandlerClass::http1_get_cgi_headers(Connect *c)
         print_err(c, "<%s:%d> cgi_parse_headers() = 0\n", __func__, __LINE__);
         return;
     }
-    
+
     for (unsigned int i = 0; i < c->h1->resp.cgi.vPar.size(); ++i)
     {
         Param header;

@@ -245,9 +245,9 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             c->client_timer = 0;
         else
         {
-            c->h1->resp.buf.init();
             if (ret != ERR_TRY_AGAIN)
             {
+                c->h1->resp.buf.init();
                 c->err = ret;
                 c->h1->connKeepAlive = false;
                 http1_end_request(c);
@@ -756,12 +756,7 @@ int read_request_headers(Connect *c)
         }
         else
         {
-            if (ret != ERR_TRY_AGAIN)
-            {
-                return ret;
-            }
-            else
-                return 0;
+            return ret;
         }
     }
 
@@ -985,6 +980,7 @@ int read_post_data(Connect *c)
         return ret;
     }
 
+    c->h1->resp.post_content_len -= ret;
     if ((c->h1->resp.cgi_type == PHPFPM) || (c->h1->resp.cgi_type == FASTCGI))
     {
         char s[8];
@@ -1000,13 +996,6 @@ int read_post_data(Connect *c)
     else
     {
         c->h1->resp.post_data.cat(buf, ret);
-    }
-
-    if ((c->h1->resp.post_content_len - ret) < 0)
-    {
-        print_err(c, "<%s:%d> !!! Error: cont_length=%lld, post_data.size=%d\n", __func__, __LINE__,
-                    c->h1->resp.post_content_len - ret, c->h1->resp.post_data.size());
-        return -1;
     }
 
     return ret;
@@ -1058,6 +1047,8 @@ const char *http1_status_response(int st)
             return "416 Range Not Satisfiable";
         case RS429:
             return "429 Too Many Requests";
+        case RS431:
+            return "431 Request Header Fields Too Large";
         case RS500:
             return "500 Internal Server Error";
         case RS501:

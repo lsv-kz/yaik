@@ -732,7 +732,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 return;
             }
 
-            if (c->h2->frame_win_update.size() || (c->h2->cgi_window_update > 0))
+            if (c->h2->frame_win_update.size() || (c->h2->cgi_window_size < 16384))
             {
                 poll_fd[num_poll].events = POLLOUT;
                 conn_array[num_poll++] = c;
@@ -740,7 +740,13 @@ void EventHandlerClass::http2_set_poll(Connect *c)
             }
 
             poll_fd[num_poll].events = POLLIN;
-
+/*
+            if (c->h2->connect_window_size <= 0)
+            {
+                conn_array[num_poll++] = c;
+                return;
+            }
+*/
             if (c->h2->work_stream == NULL)
                 c->h2->work_stream = c->h2->start_stream;
             Stream *resp = c->h2->work_stream, *resp_next = NULL;
@@ -750,21 +756,21 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 if (resp_next == NULL)
                     resp_next = c->h2->start_stream;
 
-                if (!((c->h2->connect_window_size <= 0) && c->h2->work_stream->send_headers))
+                if (resp->frame_win_update.size() ||
+                    (resp->cgi.window_size < 16384) ||
+                    resp->headers.size() ||
+                    resp->send_rst_stream ||
+                    resp->cgi.end
+                )
                 {
-                    if (resp->frame_win_update.size() ||
-                        resp->headers.size() ||
-                        resp->send_rst_stream ||
-                        resp->cgi.end ||
-                        (
-                           (
-                             (resp->source_data == FROM_FILE) ||
-                             resp->send_data.size() ||
-                             (resp->buf.size_remain() && resp->send_headers)
-                           ) &&
-                           (resp->stream_window_size > 0)
-                        )
-                    )
+                    poll_fd[num_poll].events |= POLLOUT;
+                    c->h2->work_stream = resp;
+                    break;
+                }
+
+                if ((resp->stream_window_size > 0) && (c->h2->connect_window_size > 0))
+                {
+                    if ((resp->source_data == FROM_FILE) || (resp->buf.size_remain() && resp->send_headers))
                     {
                         poll_fd[num_poll].events |= POLLOUT;
                         c->h2->work_stream = resp;
@@ -834,7 +840,12 @@ int EventHandlerClass::http2_poll(Connect *c, int conn_ind)
             close_connect(c);
         }
         else
-            ssl_shutdown(c);
+        {
+            if (revents & POLLHUP)
+                close_connect(c);
+            else
+                ssl_shutdown(c);
+        }
         return -1;
     }
 

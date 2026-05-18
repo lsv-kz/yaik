@@ -135,8 +135,6 @@ void print_err(Connect *con, const char *format, ...)
     str.cat_logtime();
     str.cat("] - [", 5);
     str.cat_int(con->numConn);
-    str.cat("/", 1);
-    str.cat_int(con->numReq);
     str.cat("] ", 2);
     str.cat_str(buf);
 

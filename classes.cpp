@@ -12,16 +12,16 @@ http2::http2()
     connect_window_size = 65535;
     max_frame_size = 0;
     cgi_window_update = 0;
-    cgi_window_size = 0;
+    cgi_window_size = 65535;
 
     max_streams = conf->MaxConcurrentStreams;
     num_streams = err = 0;
     work_stream = start_stream = end_stream = NULL;
 
-    settings.cpy("\x00\x00\x12\x04\x00\x00\x00\x00\x00" // SETTINGS (type=0x4)
+    settings.cpy("\x00\x00\x0c\x04\x00\x00\x00\x00\x00" // SETTINGS (type=0x4)
                 "\x00\x01\x00\x00\x00\x00"              // SETTINGS_HEADER_TABLE_SIZE (0x1)  size of the dynamic table
                 "\x00\x03\x00\x00\x00\x00"              // SETTINGS_MAX_CONCURRENT_STREAMS (0x3)
-                "\x00\x04\x00\x00\x3e\x80", 9 + 18);    // SETTINGS_INITIAL_WINDOW_SIZE (0x4)
+                , 9 + 12);
 
     settings.set_byte((conf->HeaderTableSize>>24) & 0xff, 11);
     settings.set_byte((conf->HeaderTableSize>>16) & 0xff, 12);
@@ -219,7 +219,7 @@ int http2::get_str(std::string& str, int *offset)
 
     if ((ch = body.get_byte((*offset)++)) < 0)
     {
-        print_err("<%s:%d> Error body.get_byte()=%d\n", __func__, __LINE__, ch);
+        print_err("<%s:%d> Error get_byte()=%d\n", __func__, __LINE__, ch);
         return -1;
     }
 
@@ -355,7 +355,7 @@ int http2::parse(Stream *r)
         else if ((ch >= 0x20) && (ch <= 0x3f))
         {// Dynamic Table Size Update
             int size = bytes_to_int(ch & 0x1f, 5, body.ptr(), body.size(), &offset);
-            print_err("[%lu/%lu] <%s:%d>--- Dynamic Table Size Update: %d ---\n", r->numConn, r->numReq, __func__, __LINE__, size);
+            print_err("[%lu/%lu] recv Dynamic Table Size Update: %d\n", r->numConn, r->numReq, size);
             continue;
         }
         else
@@ -365,7 +365,7 @@ int http2::parse(Stream *r)
         }
 
         if (conf->PrintDebugMsg)
-            print_err("[%lu/%lu] <%s:%d> [%s: %s]\n", r->numConn, r->numReq, __func__, __LINE__, name.c_str(), val.c_str());
+            print_err("[%lu/%lu] [%s: %s]\n", r->numConn, r->numReq, name.c_str(), val.c_str());
 
         if (name == ":method")
         {
@@ -418,6 +418,7 @@ int http2::parse(Stream *r)
 
     if (conf->PrintDebugMsg)
     {
+        fprintf(stderr, "\n");
         if (dyn_tab)
             dyn_tab->print();
     }
