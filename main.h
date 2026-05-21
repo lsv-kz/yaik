@@ -451,6 +451,7 @@ const char *get_str_frame_type(FRAME_TYPE);
 const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_status(CGI_STATUS s);
 const char *get_http2_error(int err);
+const char *get_str_sourcedata(SOURCE_DATA n);
 
 int clean_path(char *path, int len);
 const char *content_type(const char *s);

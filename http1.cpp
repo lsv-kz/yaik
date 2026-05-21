@@ -342,35 +342,21 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
         }
         else
         {
-            if (c->h1->resp.send_data.size_remain() == 0)
+            if (c->h1->resp.send_data.size_remain() > 0)
             {
-                if ((c->h1->resp.source_data == FROM_DATA_BUFFER) ||
-                     (c->h1->resp.source_data == DYN_PAGE)
-                )
-                {
-                    if (c->h1->resp.send_data.size_remain() > conf->HTTP1_DataBufSize)
-                        write_bytes = conf->HTTP1_DataBufSize;
-                    else
-                        write_bytes = c->h1->resp.send_data.size_remain();
-                }
+                if (c->h1->resp.send_data.size_remain() > conf->HTTP1_DataBufSize)
+                    write_bytes = conf->HTTP1_DataBufSize;
                 else
-                {
-                    print_err(c, "<%s:%d> Error send_data=0\n", __func__, __LINE__);
-                    c->err = -1;
-                    http1_end_request(c);
-                    return -1;
-                }
-
-                if (write_bytes <= 0)
-                {
-                    print_err(c, "<%s:%d> write_bytes=%d\n", __func__, __LINE__, write_bytes);
-                    http1_end_request(c);
-                    return 0;
-                }
+                    write_bytes = c->h1->resp.send_data.size_remain();
+                memcpy(snd_buf, c->h1->resp.send_data.ptr_remain(), write_bytes);
             }
             else
-                write_bytes = c->h1->resp.send_data.size_remain();
-            memcpy(snd_buf, c->h1->resp.send_data.ptr_remain(), write_bytes);
+            {
+                print_err(c, "<%s:%d> Error send_data=0, %s\n", __func__, __LINE__, get_str_sourcedata(c->h1->resp.source_data));
+                c->err = -1;
+                http1_end_request(c);
+                return -1;
+            }
         }
 
         int ret = write_to_client(c, snd_buf, write_bytes, 0);

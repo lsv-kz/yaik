@@ -308,6 +308,25 @@ const char *get_http2_error(int err)
     return "?";
 }
 //======================================================================
+const char *get_str_sourcedata(SOURCE_DATA n)
+{
+    switch (n)
+    {
+        case NO_SOURCE:
+            return "NO_SOURCE";
+        case DIRECTORY:
+            return "DIRECTORY";
+        case FROM_FILE:
+            return "FROM_FILE";
+        case FROM_DATA_BUFFER:
+            return "FROM_DATA_BUFFER";
+        case DYN_PAGE:
+            return "DYN_PAGE";
+    }
+
+    return "?";
+}
+//======================================================================
 const char *content_type(const char *s)
 {
     const char *p = strrchr(s, '.');

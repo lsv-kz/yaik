@@ -33,7 +33,7 @@ Tested on OS: Debian, OpenBSD, FreeBSD
  * mkdir objs/
  * mkdir certs/
  * make clean
- * make  
+ * make
 
  * Edit configuration file: yaik.conf
  * ./yaik
