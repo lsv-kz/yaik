@@ -5,7 +5,6 @@ const unsigned int array_reserve = 32;
 http2::http2()
 {
     recv_settings = recv_settings_ack = send_settings_ack = false;
-    try_again = false;
     header_len = id = body_len = 0;
     HTTP2_SendBufSize = 16384-9; // max size frame payload
     init_window_size = 65535;
@@ -13,6 +12,9 @@ http2::http2()
     max_frame_size = 0;
     cgi_window_update = 0;
     cgi_window_size = 65535;
+
+    try_again = false;
+    send_again.stream = NULL;
 
     max_streams = conf->MaxConcurrentStreams;
     num_streams = err = 0;

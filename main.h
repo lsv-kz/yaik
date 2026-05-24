@@ -125,13 +125,19 @@ struct http2
     ByteArray settings;
     ByteArray frame_win_update;
 
+    bool try_again;
+    struct
+    {
+        Stream *stream;
+        int id;
+        FRAME_TYPE type;
+    } send_again;
+
     DynamicTable *dyn_tab;
 
     bool recv_settings;
     bool recv_settings_ack;
     bool send_settings_ack;
-
-    bool try_again;
     //----------------------
     void init()
     {

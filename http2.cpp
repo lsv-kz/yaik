@@ -627,6 +627,33 @@ int set_response(Connect *c, Stream *resp)
     return 0;
 }
 //======================================================================
+int set_send_again(Connect *c, Stream *stream, FRAME_TYPE type, int id)
+{
+    if (c->h2->try_again == false)
+    {
+        //print_err("[%lu/%d] %s, ERR_TRY_AGAIN, id=%d \n", c->numConn, id, get_str_frame_type(type), id);
+        c->h2->try_again = true;
+        c->h2->send_again.stream = stream;
+        c->h2->send_again.id = id;
+        c->h2->send_again.type = type;
+    }
+    else
+    {
+        if ((c->h2->send_again.id == id) &&
+            (c->h2->send_again.type == type) &&
+            (c->h2->send_again.stream == stream)
+        )
+        {
+            return ERR_TRY_AGAIN;
+        }
+
+        print_err("[%lu/%d] Error frame_try_again != NULL, %s, id=%d \n", c->numConn, id, get_str_frame_type(type), id);
+        return -1;
+    }
+
+    return ERR_TRY_AGAIN;
+}
+//======================================================================
 int EventHandlerClass::http2_connection(Connect *c)
 {
     if (c->h2->con_status == http2::PREFACE_MESSAGE)
@@ -866,7 +893,6 @@ int EventHandlerClass::parse_frame(Connect *c)
             }
             else
             {
-                print_err(c, "<%s:%d> frame SETTINGS: size=0, flags=0\n", __func__, __LINE__);
                 c->h2->recv_settings = true;
                 if (c->h2->settings.size() == 0)
                     c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
@@ -1044,7 +1070,7 @@ int EventHandlerClass::parse_frame(Connect *c)
     {
         if (conf->PrintDebugMsg)
             hex_print_stderr("recv PING", __LINE__, c->h2->body.ptr(), c->h2->body.size());
-        print_err("[%u] recv PING\n", c->numConn);
+        print_err(c, "recv PING\n");
         c->h2->ping.cpy("\x0\x0\x8\x6\x1\x0\x0\x0\x0", 9);
         c->h2->ping.cat(c->h2->body.ptr(), c->h2->body.size());
     }
@@ -1105,7 +1131,6 @@ void EventHandlerClass::send_frames(Connect *c)
     {
         if (ret == ERR_TRY_AGAIN)
         {
-            c->h2->try_again = true;
             return;
         }
         ssl_shutdown(c);
@@ -1132,6 +1157,31 @@ int EventHandlerClass::send_frames_(Connect *c)
     }
     else if (c->h2->con_status == http2::PROCESSING_REQUESTS)
     {
+        if (c->h2->try_again)
+        {
+            switch (c->h2->send_again.type)
+            {
+                case DATA:
+                    return  send_frame_data(c, c->h2->send_again.stream);
+                case HEADERS:
+                    return send_frame_headers(c, c->h2->send_again.stream);
+                case RST_STREAM:
+                    return send_frame_rststream(c, c->h2->send_again.stream);
+                case GOAWAY:
+                    return send_frame_goawey(c);
+                case WINDOW_UPDATE:
+                    if (c->h2->send_again.id == 0)
+                        return send_window_update(c);
+                    else
+                        return send_window_update(c, c->h2->send_again.stream);
+                case PING:
+                    return send_frame_ping(c);
+                default:
+                    print_err(c, "<%s:%d> Error stream id=%d does not exist\n", __func__, __LINE__, c->h2->send_again.id);
+                    return -1;
+            }
+        }
+
         if (c->h2->goaway.size())
         {
             return send_frame_goawey(c);
@@ -1172,7 +1222,7 @@ int EventHandlerClass::send_frames_(Connect *c)
         if (resp == NULL)
             return 0;
 
-        if (resp->send_rst_stream && (c->h2->try_again == false))
+        if (resp->send_rst_stream)
         {
             return send_frame_rststream(c, resp);
         }
@@ -1232,11 +1282,13 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
         {
             if (ret == ERR_TRY_AGAIN)
             {
-                //print_err(resp, "<%s:%d> Error send frame HEADERS: SSL_ERROR_WANT_WRITE, id=%d \n", __func__, __LINE__, resp->id);
+                return set_send_again(c, resp, HEADERS, resp->id);
             }
             else
+            {
                 print_err(resp, "<%s:%d> Error send frame HEADERS: %d, id=%d \n", __func__, __LINE__, ret, resp->id);
-            return ret;
+                return ret;
+            }
         }
 
         c->client_timer = 0;
@@ -1296,15 +1348,15 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
         {
             //print_err(resp, "<%s:%d> Error send frame DATA: %d, %d, id=%d \n", __func__, __LINE__,
             //                                    ret, resp->send_data.size(), resp->id);
+            return set_send_again(c, resp, DATA, resp->id);
         }
         else
         {
             print_err(resp, "<%s:%d> Error send frame DATA: %d, %d, send_bytes=%lld, id=%d \n", __func__, __LINE__,
                                                 ret, resp->send_data.size(), resp->send_bytes, resp->id);
             resp->send_data.init();
+            return ret;
         }
-
-        return ret;
     }
 
     c->client_timer = 0;
@@ -1393,9 +1445,15 @@ int EventHandlerClass::send_frame_ping(Connect *c)
     if (ret < 0)
     {
         print_err(c, "<%s:%d> Error send frame PING, id=0 \n", __func__, __LINE__);
-        if (ret != ERR_TRY_AGAIN)
+        if (ret == ERR_TRY_AGAIN)
+        {
+            return set_send_again(c, NULL, PING, 0);
+        }
+        else
+        {
             c->h2->ping.init();
-        return ret;
+            return ret;
+        }
     }
 
     if (conf->PrintDebugMsg)
@@ -1413,9 +1471,15 @@ int EventHandlerClass::send_frame_goawey(Connect *c)
     if (ret < 0)
     {
         print_err(c, "<%s:%d> Error send frame GOAWAY, id=0 \n", __func__, __LINE__);
-        if (ret != ERR_TRY_AGAIN)
+        if (ret == ERR_TRY_AGAIN)
+        {
+            return set_send_again(c, NULL, GOAWAY, 0);
+        }
+        else
+        {
             c->h2->goaway.init();
-        return ret;
+            return ret;
+        }
     }
 
     if (conf->PrintDebugMsg)
@@ -1439,15 +1503,15 @@ int EventHandlerClass::send_frame_rststream(Connect *c, Stream *resp)
     int ret = write_to_client(c, resp->rst_stream.ptr_remain(), resp->rst_stream.size_remain(), 0);
     if (ret < 0)
     {
-        if (ret != ERR_TRY_AGAIN)
+        if (ret == ERR_TRY_AGAIN)
         {
-            print_err(resp, "<%s:%d> Error send frame RST_STREAM, id=%d \n", __func__, __LINE__, resp->id);
+            return set_send_again(c, resp, RST_STREAM, resp->id);
         }
         else
         {
-            print_err(resp, "<%s:%d> Error ERR_TRY_AGAIN send frame RST_STREAM, id=%d \n", __func__, __LINE__, resp->id);
+            print_err(resp, "<%s:%d> Error send frame RST_STREAM, id=%d \n", __func__, __LINE__, resp->id);
+            return ret;
         }
-        return ret;
     }
 
     if (conf->PrintDebugMsg)
@@ -1465,11 +1529,18 @@ int EventHandlerClass::send_frame_rststream(Connect *c, Stream *resp)
 //======================================================================
 int EventHandlerClass::send_window_update(Connect *c)
 {
-    int ret = 0;
-    if ((ret = write_to_client(c, c->h2->frame_win_update.ptr_remain(), c->h2->frame_win_update.size_remain(), 0)) <= 0)
+    int ret = write_to_client(c, c->h2->frame_win_update.ptr_remain(), c->h2->frame_win_update.size_remain(), 0);
+    if (ret < 0)
     {
-        print_err(c, "<%s:%d> Error send frame WINDOW_UPDATE: %d, %d, id=0 \n", __func__, __LINE__, ret, c->h2->frame_win_update.size_remain());
-        return ret;
+        if (ret == ERR_TRY_AGAIN)
+        {
+            return set_send_again(c, NULL, WINDOW_UPDATE, 0);
+        }
+        else
+        {
+            print_err(c, "<%s:%d> Error send frame WINDOW_UPDATE: %d, id=0 \n", __func__, __LINE__, ret);
+            return ret;
+        }
     }
 
     c->client_timer = 0;
@@ -1484,11 +1555,19 @@ int EventHandlerClass::send_window_update(Connect *c)
 //======================================================================
 int EventHandlerClass::send_window_update(Connect *c, Stream *resp)
 {
-    int ret = 0;
-    if ((ret = write_to_client(c, resp->frame_win_update.ptr_remain(), resp->frame_win_update.size_remain(), resp->id)) <= 0)
+    int ret = write_to_client(c, resp->frame_win_update.ptr_remain(), resp->frame_win_update.size_remain(), resp->id);
+    if (ret < 0)
     {
         print_err(resp, "<%s:%d> Error send frame WINDOW_UPDATE: %d, %d, id=%d \n", __func__, __LINE__, ret, resp->frame_win_update.size_remain(), resp->id);
-        return ret;
+        if (ret == ERR_TRY_AGAIN)
+        {
+            return set_send_again(c, resp, WINDOW_UPDATE, resp->id);
+        }
+        else
+        {
+            print_err(c, "<%s:%d> Error send frame WINDOW_UPDATE: %d, id=%d \n", __func__, __LINE__, ret, resp->id);
+            return ret;
+        }
     }
 
     c->client_timer = 0;
