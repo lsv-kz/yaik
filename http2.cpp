@@ -4,29 +4,16 @@ using namespace std;
 
 const bool huff_coding = true;
 //======================================================================
-void set_frame(Stream *resp, char *s, int len, int type, HTTP2_FLAGS flags, int id)
-{
-    s[0] = (len>>16) & 0xff;
-    s[1] = (len>>8) & 0xff;
-    s[2] = len & 0xff;
-
-    s[3] = (unsigned char)type;
-    s[4] = (unsigned char)flags;
-
-    s[5] = (id>>24) & 0x7f;
-    s[6] = (id>>16) & 0xff;
-    s[7] = (id>>8) & 0xff;
-    s[8] = id & 0xff;
-}
-//======================================================================
 void set_frame_headers(Stream *resp)
 {
     int id = resp->id;
-    resp->headers.cpy("\0\0\0\1\4\0\0\0\0", 9);
-    resp->headers.set_byte((id>>24) & 0x7f, 5);
-    resp->headers.set_byte((id>>16) & 0xff, 6);
-    resp->headers.set_byte((id>>8) & 0xff, 7);
-    resp->headers.set_byte(id & 0xff, 8);
+    char s[] = "\0\0\0\1\4\0\0\0\0";
+    s[8] = id;
+    s[7] = id>>=8;
+    s[6] = id>>=8;
+    s[5] = (id>>8) & 0x7f;
+
+    resp->headers.cpy(s, 9);
     if (resp->numReq == 1)
         resp->headers.cat(0x20);
 }
@@ -37,27 +24,15 @@ void set_frame_flags(ByteArray *ba, int flags)
     ba->set_byte(fl | flags, 4);
 }
 //======================================================================
-int get_frame_id(ByteArray *ba)
-{
-    if (ba == NULL)
-        return -1;
-    int id = 0;
-    id = (ba->get_byte(5) & 0x7f)<<24;
-    id = id | ba->get_byte(6)<<16;
-    id = id | ba->get_byte(7)<<8;
-    id = id | ba->get_byte(8);
-    return id;
-}
-//======================================================================
 void add_header(Stream *resp, int ind)
 {
     if ((ind >= 8) && (ind <= 14))
         resp->resp_status = atoi(static_tab[ind][1]);
     resp->headers.cat(ind | 0x80);
     int len = resp->headers.size() - 9;
-    resp->headers.set_byte((len>>16) & 0xff, 0);
-    resp->headers.set_byte((len>>8) & 0xff, 1);
-    resp->headers.set_byte(len & 0xff, 2);
+    resp->headers.set_byte(len, 2);
+    resp->headers.set_byte((len>>=8), 1);
+    resp->headers.set_byte((len>>8), 0);
 }
 //======================================================================
 void add_header(Stream *resp, int ind, int mask, const char *val, bool huffman)
@@ -97,10 +72,11 @@ void add_header(Stream *resp, int ind, int mask, const char *val, bool huffman)
         int_to_bytes(resp->headers, len, 7, 0);
         resp->headers.cat(val, len);
     }
+
     len = resp->headers.size() - 9;
-    resp->headers.set_byte((len>>16) & 0xff, 0);
-    resp->headers.set_byte((len>>8) & 0xff, 1);
-    resp->headers.set_byte(len & 0xff, 2);
+    resp->headers.set_byte(len, 2);
+    resp->headers.set_byte((len>>=8), 1);
+    resp->headers.set_byte((len>>8), 0);
 }
 //======================================================================
 void add_header(Stream *resp, int ind, const char *val)
@@ -142,9 +118,9 @@ void add_header(Stream *resp, const char *name, const char *val, bool huffman)
     }
 
     len = resp->headers.size() - 9;
-    resp->headers.set_byte((len>>16) & 0xff, 0);
-    resp->headers.set_byte((len>>8) & 0xff, 1);
-    resp->headers.set_byte(len & 0xff, 2);
+    resp->headers.set_byte(len, 2);
+    resp->headers.set_byte(len>>=8, 1);
+    resp->headers.set_byte(len>>8, 0);
 }
 //======================================================================
 void add_header(Stream *resp, const char *name, const char *val)
@@ -152,78 +128,80 @@ void add_header(Stream *resp, const char *name, const char *val)
     add_header(resp, name, val, huff_coding);
 }
 //======================================================================
-void set_frame_window_update(Stream *resp, unsigned int len)// post data
+void set_frame_window_update(Stream *resp, int len)// post data
 {
     int id = resp->id;
     char s[] = "\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
                "\x00\x00\x00\x00";                     // 9-12
+    s[8] = id;
+    s[7] = id>>=8;
+    s[6] = id>>=8;
+    s[5] = (id>>8) & 0x7f;
+
+    s[12] = len;
+    s[11] = len>>=8;
+    s[10] = len>>=8;
+    s[9] = (len>>8) & 0x7f;
 
     resp->frame_win_update.cpy(s, 13);
-
-    resp->frame_win_update.set_byte((len>>24) & 0x7f, 9);
-    resp->frame_win_update.set_byte((len>>16) & 0xff, 10);
-    resp->frame_win_update.set_byte((len>>8) & 0xff, 11);
-    resp->frame_win_update.set_byte(len & 0xff, 12);
-
-    resp->frame_win_update.set_byte((id>>24) & 0x7f, 5);
-    resp->frame_win_update.set_byte((id>>16) & 0xff, 6);
-    resp->frame_win_update.set_byte((id>>8) & 0xff, 7);
-    resp->frame_win_update.set_byte(id & 0xff, 8);
 }
 //======================================================================
-void set_frame_window_update(Connect *c, unsigned int len)// post data
+void set_frame_window_update(Connect *c, int len)// post data
 {
-    c->h2->frame_win_update.cpy("\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
-                               "\x00\x00\x00\x00", 13);                 // 9-12
+    char s[] = "\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
+               "\x00\x00\x00\x00";                     // 9-12
+    s[12] = len;
+    s[11] = len>>=8;
+    s[10] = len>>=8;
+    s[9] = (len>>8) & 0x7f;
 
-    c->h2->frame_win_update.set_byte((len>>24) & 0x7f, 9);
-    c->h2->frame_win_update.set_byte((len>>16) & 0xff, 10);
-    c->h2->frame_win_update.set_byte((len>>8) & 0xff, 11);
-    c->h2->frame_win_update.set_byte(len & 0xff, 12);
+    c->h2->frame_win_update.cpy(s, 13);
 }
 //======================================================================
 void set_frame_goaway(Connect *c, HTTP2_ERRORS error)
 {
-    char buf[] = "\x0\x0\x0\x0\x0\x0\x0\x0";
-    c->h2->goaway.cpy("\x0\x0\x8\x7\x0\x0\x0\x0\x0", 9);
+    char s[] = "\x0\x0\x8\x7\x0\x0\x0\x0\x0"
+               "\x0\x0\x0\x0\x0\x0\x0\x0";
+    s[13] = (error>>24) & 0x7f;
+    s[14] = error>>16;
+    s[15] = error>>8;
+    s[16] = error;
 
-    buf[4] = (unsigned char)((error>>24) & 0xff);
-    buf[5] = (unsigned char)((error>>16) & 0xff);
-    buf[6] = (unsigned char)((error>>8) & 0xff);
-    buf[7] = (unsigned char)(error & 0xff);
-
-    c->h2->goaway.cat(buf, 8);
+    c->h2->goaway.cpy(s, 17);
 }
 //======================================================================
 void set_rst_stream(Connect *c, Stream *resp, HTTP2_ERRORS error)
 {
     resp->send_rst_stream = true;
-    resp->rst_stream.cpy("\0\0\4\3\0\0\0\0\0"
-                         "\0\0\0\0", 13);
-    resp->rst_stream.set_byte((resp->id>>24) & 0x7f, 5);
-    resp->rst_stream.set_byte((resp->id>>16) & 0xff, 6);
-    resp->rst_stream.set_byte((resp->id>>8) & 0xff, 7);
-    resp->rst_stream.set_byte(resp->id & 0xff, 8);
-print_err(resp, "<%s:%d> --- set_rst_stream --- id=%d \n", __func__, __LINE__, resp->id);
-    resp->rst_stream.set_byte((error>>24) & 0xff, 9);
-    resp->rst_stream.set_byte((error>>16) & 0xff, 10);
-    resp->rst_stream.set_byte((error>>8) & 0xff, 11);
-    resp->rst_stream.set_byte(error & 0xff, 12);
+    char s[] = "\0\0\4\3\0\0\0\0\0"
+                "\0\0\0\0";
+    int id = resp->id;
+    s[8] = id;
+    s[7] = id>>=8;
+    s[6] = id>>=8;
+    s[5] = (id>>8) & 0x7f;
+
+    s[9] = (error>>24) & 0x7f;
+    s[10] = error>>16;
+    s[11] = error>>8;
+    s[12] = error;
+    
+    resp->rst_stream.cpy(s, 13);
 }
 //======================================================================
 void set_frame_data(Stream *resp, int len, int flag)
 {
     int id = resp->id;
-    resp->send_data.cpy("\0\0\0\0\0\0\0\0\0", 9);
-    resp->send_data.set_byte(flag, 4);
-    resp->send_data.set_byte((len>>16) & 0xff, 0);
-    resp->send_data.set_byte((len>>8) & 0xff, 1);
-    resp->send_data.set_byte(len & 0xff, 2);
-
-    resp->send_data.set_byte((id>>24) & 0x7f, 5);
-    resp->send_data.set_byte((id>>16) & 0xff, 6);
-    resp->send_data.set_byte((id>>8) & 0xff, 7);
-    resp->send_data.set_byte(id & 0xff, 8);
+    char s[] = "\0\0\0\0\0\0\0\0\0";
+    s[2] = len;
+    s[1] = len>>=8;
+    s[0] = len>>8;
+    s[4] = flag;
+    s[8] = id;
+    s[7] = id>>=8;
+    s[6] = id>>=8;
+    s[5] = (id>>8) & 0x7f;
+    resp->send_data.cpy(s, 9);
 }
 //======================================================================
 int set_frame_data(Connect *c, Stream *resp)

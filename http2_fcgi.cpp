@@ -651,7 +651,10 @@ void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
         else if (header.name == "location")
             add_header(resp, 46, header.val.c_str());
         else
+        {
+            print_err(resp, "<%s:%d> [%s: %s]\n", __func__, __LINE__, header.name.c_str(), header.val.c_str());
             add_header(resp, header.name.c_str(), header.val.c_str());
+        }
     }
 
     if (resp->resp_status == RS204)

@@ -28,12 +28,11 @@ Tested on OS: Debian, OpenBSD, FreeBSD
  * And everything that was not included in the Features
 
 ### Compiling and run:
- * Install libraries: OpenSSL or LibreSSL.
+ * Install libraries: OpenSSL or LibreSSL
  * cd yaik/
  * mkdir objs/
  * mkdir certs/
  * make clean
  * make
-
  * Edit configuration file: yaik.conf
  * ./yaik
