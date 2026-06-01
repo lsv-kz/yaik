@@ -5,18 +5,46 @@ using namespace std;
 static Config c;
 const Config* const conf = &c;
 //======================================================================
-int check_path(string& path)
+enum { CURRENT_DIR, PARENT_DIR, ADD_FOLDER };
+//======================================================================
+int parse_folder(const char *s, int i)// "../", "/../", "/.."
+{
+    if (!strncmp(s, "../", i) )
+        return PARENT_DIR;
+    else if (!strncmp(s, "/../", i))
+        return PARENT_DIR;
+    else if (!strncmp(s, "/..", i))
+        return PARENT_DIR;
+    else if (!strncmp(s, "./", i))
+        return CURRENT_DIR;
+    else if (!strncmp(s, "/.", i))
+        return CURRENT_DIR;
+    else if (!strncmp(s, "/./", i))
+        return CURRENT_DIR;
+    return ADD_FOLDER;
+}
+//======================================================================
+void *memrchr_(const void *s, char c, int n)
+{
+    if (n > 0)
+    {
+        const char *p = (const char *)s + n;
+        while (--n > 0)
+        {
+            if (*(--p) == c)
+                return (void *)p;
+        }
+    }
+    return NULL;
+}
+//======================================================================
+int absolute_path(string& path)
 {
     struct stat st;
-
     int ret = stat(path.c_str(), &st);
     if (ret == -1)
     {
         fprintf(stderr, "<%s:%d> Error stat(%s): %s\n", __func__, __LINE__, path.c_str(), strerror(errno));
-        char buf[2048];
-        char *cwd = getcwd(buf, sizeof(buf));
-        if (cwd)
-            fprintf(stderr, "<%s:%d> cwd: %s\n", __func__, __LINE__, cwd);
         return -1;
     }
 
@@ -26,15 +54,164 @@ int check_path(string& path)
         return -1;
     }
 
-    char path_[PATH_MAX] = "";
-    if (!realpath(path.c_str(), path_))
+    if (path[0] == '/')
     {
-        fprintf(stderr, "<%s:%d> Error realpath(): %s\n", __func__, __LINE__, strerror(errno));
+        if (path[path.size() - 1] == '/')
+            path.resize(path.size() - 1);
+
+        return 0;
+    }
+
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd)) == NULL)
+    {
+        fprintf(stderr, "<%s:%d> Error getcwd(): %s\n", __func__, __LINE__, strerror(errno));
         return -1;
     }
 
-    path = path_;
+    int cwd_len = strlen(cwd);
+    if (cwd[cwd_len - 1] == '/')
+    {
+        cwd[cwd_len - 1] = 0;
+        cwd_len--;
+    }
 
+    int path_len = path.size();
+    int i_path = 0;
+    int anchor[2] = {0};
+    char ch;
+    char prev_ch = '\0';
+
+    while (path_len > 0)
+    {
+        --path_len;
+        anchor[1] = i_path;
+        ch = path[i_path++];
+
+        if (ch == '/')
+        {
+            if (prev_ch != '/')
+            {
+                int ret = parse_folder(path.c_str() + anchor[0], anchor[1] - anchor[0] + 1);
+                if (ret == PARENT_DIR)// [/../], [../]
+                {
+                    char *p = (char*)memrchr_(cwd, '/', cwd_len);
+                    if (p)
+                    {
+                        if (p == cwd)
+                        {
+                            cwd_len = 1;
+                            cwd[cwd_len] = 0;
+                        }
+                        else
+                        {
+                            *p = 0;
+                            cwd_len = p - cwd;
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "<%s:%d> Error: '/' not found\n", __func__, __LINE__);
+                        return -1;
+                    }
+                }
+                else if (ret == ADD_FOLDER)
+                {
+                    int len = anchor[1] - anchor[0];
+                    if (path[anchor[0]] != '/')
+                    {
+                        if ((cwd_len + len + 1) >= (int)sizeof(cwd))
+                        {
+                            fprintf(stderr, "<%s:%d> Error: danger of overflow (%d => %d)\n", __func__, __LINE__, cwd_len + len + 1, (int)sizeof(cwd));
+                            return -1;
+                        }
+                        *(cwd + cwd_len) = '/';
+                        ++cwd_len;
+                        cwd[cwd_len] = 0;
+                    }
+                    else
+                    {
+                        if ((cwd_len + len) >= (int)sizeof(cwd))
+                        {
+                            fprintf(stderr, "<%s:%d> Error: danger of overflow (%d => %d)\n", __func__, __LINE__, cwd_len + len, (int)sizeof(cwd));
+                            return -1;
+                        }
+                    }
+
+                    memcpy(cwd + cwd_len, path.c_str() + anchor[0], len);
+                    cwd_len += len;
+                    *(cwd + cwd_len) = 0;
+                }
+            }
+
+            anchor[0] = anchor[1];
+        }
+        else
+        {
+            if (path_len == 0)
+            {
+                int ret = parse_folder(path.c_str() + anchor[0], anchor[1] - anchor[0] + 1);
+                if (ret == PARENT_DIR)// [/../], [../]
+                {
+                    char *p = (char*)memrchr_(cwd, '/', cwd_len);
+                    if (p)
+                    {
+                        if (p == cwd)
+                        {
+                            cwd_len = 1;
+                            cwd[cwd_len] = 0;
+                        }
+                        else
+                        {
+                            *p = 0;
+                            cwd_len = p - cwd;
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "<%s:%d> Error: '/' not found\n", __func__, __LINE__);
+                        return -1;
+                    }
+                }
+                else if (ret == ADD_FOLDER)
+                {
+                    int len = anchor[1] - anchor[0] + 1;
+                    if (path[anchor[0]] != '/')
+                    {
+                        if ((cwd_len + len + 1) >= (int)sizeof(cwd))
+                        {
+                            fprintf(stderr, "<%s:%d> Error: danger of overflow (%d => %d)\n", __func__, __LINE__, cwd_len + len + 1, (int)sizeof(cwd));
+                            return -1;
+                        }
+                        *(cwd + cwd_len) = '/';
+                        ++cwd_len;
+                        cwd[cwd_len] = 0;
+                    }
+                    else
+                    {
+                        if ((cwd_len + len) >= (int)sizeof(cwd))
+                        {
+                            fprintf(stderr, "<%s:%d> Error: danger of overflow (%d => %d)\n", __func__, __LINE__, cwd_len + len, (int)sizeof(cwd));
+                            return -1;
+                        }
+                    }
+
+                    memcpy(cwd + cwd_len, path.c_str() + anchor[0], len);
+                    cwd_len += len;
+                    *(cwd + cwd_len) = 0;
+                }
+            }
+        }
+
+        prev_ch = ch;
+    }
+
+    path = cwd;
+    if (stat(path.c_str(), &st) == -1)
+    {
+        fprintf(stderr, "<%s:%d> Error stat(%s): %s\n", __func__, __LINE__, path.c_str(), strerror(errno));
+        return -1;
+    }
     return 0;
 }
 //======================================================================
@@ -620,13 +797,13 @@ int read_conf_file(FILE *fconf)
 
     fclose(fconf);
     //------------------------------------------------------------------
-    if (check_path(c.LogPath) == -1)
+    if (absolute_path(c.LogPath) == -1)
     {
         fprintf(stderr, "<%s:%d> !!! Error LogPath [%s]\n", __func__, __LINE__, conf->LogPath.c_str());
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(c.ScriptPath) == -1)
+    if (absolute_path(c.ScriptPath) == -1)
     {
         c.ScriptPath = "";
         fprintf(stderr, "<%s:%d> !!! Error ScriptPath [%s]\n", __func__, __LINE__, conf->ScriptPath.c_str());
@@ -668,7 +845,7 @@ int read_conf_file(FILE *fconf)
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(c.DocumentRoot) == -1)
+    if (absolute_path(c.DocumentRoot) == -1)
     {
         fprintf(stderr, "<%s:%d> !!! Error DocumentRoot [%s]\n", __func__, __LINE__, conf->DocumentRoot.c_str());
         return -1;
@@ -702,7 +879,7 @@ int read_conf_file(FILE *fconf)
             VHost *h = serv->vhosts;
             for ( ; h; h = h->next)
             {
-                if (check_path(h->DocumentRoot) == -1)
+                if (absolute_path(h->DocumentRoot) == -1)
                 {
                     fprintf(stderr, "<%s:%d> !!! Error DocumentRoot [%s], [%s]\n", __func__, __LINE__,
                                     h->DocumentRoot.c_str(), h->hostname.c_str());

@@ -5,7 +5,7 @@ using namespace std;
 const char *nameConfifFile = "yaik.conf";
 static string confPath;
 
-//static void print_config();
+void print_config();
 //======================================================================
 static void signal_handler(int signo)
 {
