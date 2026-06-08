@@ -257,7 +257,7 @@ int EventHandlerClass::cgi_stdin(Stream *resp, int fd)
     }
 
     resp->cgi.timer = 0;
-    resp->post_data.set_offset(ret);
+    resp->post_data.inc_offset(ret);
     if (resp->post_data.size_remain() == 0)
     {
         resp->post_data.init();

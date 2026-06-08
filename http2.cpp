@@ -238,7 +238,7 @@ int set_frame_data(Connect *c, Stream *resp)
 
             set_frame_data(resp, len, 0);
             resp->send_data.cat(resp->buf.ptr_remain(), len);
-            resp->buf.set_offset(len);
+            resp->buf.inc_offset(len);
             if (resp->buf.size_remain() == 0)
                 resp->buf.init();
         }
@@ -313,7 +313,7 @@ int set_frame_data(Connect *c, Stream *resp)
             int flag = (resp->resp_content_len > 0) ? 0 : FLAG_END_STREAM;
             set_frame_data(resp, data_len, flag);
             resp->send_data.cat(resp->buf.ptr_remain(), data_len);
-            resp->buf.set_offset(data_len);
+            resp->buf.inc_offset(data_len);
         }
     }
 
@@ -1270,7 +1270,7 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
         }
 
         c->client_timer = 0;
-        resp->headers.set_offset(ret);
+        resp->headers.inc_offset(ret);
         if (resp->headers.size_remain())
             return ERR_TRY_AGAIN;
         resp->send_headers = true;
@@ -1338,7 +1338,7 @@ int EventHandlerClass::send_frame_data(Connect *c, Stream *resp)
     }
 
     c->client_timer = 0;
-    resp->send_data.set_offset(ret);
+    resp->send_data.inc_offset(ret);
     if (resp->send_data.size_remain())
         return ERR_TRY_AGAIN;
     else
@@ -1396,7 +1396,7 @@ int EventHandlerClass::send_frame_settings(Connect *c)
         hex_print_stderr(__func__, __LINE__, c->h2->settings.ptr(), c->h2->settings.size());
 
     c->client_timer = 0;
-    c->h2->settings.set_offset(ret);
+    c->h2->settings.inc_offset(ret);
     if (c->h2->settings.size_remain())
         return ERR_TRY_AGAIN;
     if (c->h2->settings.get_byte(4) == 1)
@@ -1436,7 +1436,7 @@ int EventHandlerClass::send_frame_ping(Connect *c)
 
     if (conf->PrintDebugMsg)
         hex_print_stderr(__func__, __LINE__, c->h2->ping.ptr_remain(), c->h2->ping.size_remain());
-    c->h2->ping.set_offset(ret);
+    c->h2->ping.inc_offset(ret);
     if (c->h2->ping.size_remain())
         return ERR_TRY_AGAIN;
     c->h2->ping.init();
@@ -1463,7 +1463,7 @@ int EventHandlerClass::send_frame_goawey(Connect *c)
     if (conf->PrintDebugMsg)
         hex_print_stderr(__func__, __LINE__, c->h2->goaway.ptr_remain(), c->h2->goaway.size_remain());
     c->client_timer = 0;
-    c->h2->goaway.set_offset(ret);
+    c->h2->goaway.inc_offset(ret);
     if (c->h2->goaway.size_remain())
         return ERR_TRY_AGAIN;
     c->h2->goaway.init();
@@ -1495,7 +1495,7 @@ int EventHandlerClass::send_frame_rststream(Connect *c, Stream *resp)
     if (conf->PrintDebugMsg)
         hex_print_stderr(__func__, __LINE__, resp->rst_stream.ptr_remain(), resp->rst_stream.size_remain());
     c->client_timer = 0;
-    resp->rst_stream.set_offset(ret);
+    resp->rst_stream.inc_offset(ret);
     if (resp->rst_stream.size_remain())
         return ERR_TRY_AGAIN;
     resp->resp_status = 0;
@@ -1522,7 +1522,7 @@ int EventHandlerClass::send_window_update(Connect *c)
     }
 
     c->client_timer = 0;
-    c->h2->frame_win_update.set_offset(ret);
+    c->h2->frame_win_update.inc_offset(ret);
     if (c->h2->frame_win_update.size_remain())
         return ERR_TRY_AGAIN;
     c->h2->cgi_window_size += c->h2->cgi_window_update;
@@ -1549,7 +1549,7 @@ int EventHandlerClass::send_window_update(Connect *c, Stream *resp)
     }
 
     c->client_timer = 0;
-    resp->frame_win_update.set_offset(ret);
+    resp->frame_win_update.inc_offset(ret);
     if (resp->frame_win_update.size_remain())
         return ERR_TRY_AGAIN;
     resp->cgi.window_size += resp->cgi.window_update;

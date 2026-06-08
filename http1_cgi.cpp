@@ -63,7 +63,7 @@ int cgi_set_size_chunk(ByteArray *ba)
     if (size != 0)
         return -1;
 
-    ba->set_offset(i);
+    ba->inc_offset(i);
     ba->cat("\r\n", 2);
 
     return 0;

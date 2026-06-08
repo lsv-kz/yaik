@@ -27,7 +27,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             }
 
             c->h1->resp.cgi.timer = 0;
-            c->h1->resp.cgi.buf_param.set_offset(ret);
+            c->h1->resp.cgi.buf_param.inc_offset(ret);
             if (c->h1->resp.cgi.buf_param.size_remain() == 0)
             {
                 c->h1->resp.cgi.buf_param.init();
@@ -64,7 +64,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             }
 
             c->h1->resp.cgi.timer = 0;
-            c->h1->resp.cgi.buf_param.set_offset(ret);
+            c->h1->resp.cgi.buf_param.inc_offset(ret);
             if (c->h1->resp.cgi.buf_param.size_remain() == 0)
             {
                 if (c->h1->resp.cgi.buf_param.size() == 8)
@@ -116,7 +116,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             print_err(c, "<%s:%d> !!! Error write()=%d(%d)\n", __func__, __LINE__, ret, c->h1->resp.post_data.size_remain());
         }
 
-        c->h1->resp.post_data.set_offset(ret);
+        c->h1->resp.post_data.inc_offset(ret);
         c->h1->resp.cgi.timer = 0;
         if (c->h1->resp.post_data.size_remain() == 0)
         {

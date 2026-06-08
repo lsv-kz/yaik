@@ -186,7 +186,7 @@ int fcgi_create_params(Connect *c, Stream *resp)
     if (resp->cgi_type == PHPFPM)
     {
         param.name = "SCRIPT_FILENAME";
-        param.val = conf->DocumentRoot + resp->clean_decode_path;
+        param.val = resp->vhost->DocumentRoot + resp->clean_decode_path;
         resp->cgi.vPar.push_back(param);
         ++i;
     }
@@ -288,7 +288,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->cgi.timer = 0;
-            resp->cgi.buf_param.set_offset(ret);
+            resp->cgi.buf_param.inc_offset(ret);
             if (resp->cgi.buf_param.size_remain() == 0)
             {
                 resp->cgi.buf_param.init();
@@ -320,7 +320,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->cgi.timer = 0;
-            resp->cgi.buf_param.set_offset(ret);
+            resp->cgi.buf_param.inc_offset(ret);
             if (resp->cgi.buf_param.size_remain() == 0)
             {
                 if (resp->cgi.buf_param.size() == 8)
@@ -368,7 +368,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             return;
         }
 
-        resp->post_data.set_offset(ret);
+        resp->post_data.inc_offset(ret);
         if (resp->post_data.size_remain() == 0)
         {
             resp->cgi.timer = 0;
@@ -526,7 +526,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                     ++i;
                     if (ch == '\n') // empty line
                     {
-                        resp->buf.set_offset(i);
+                        resp->buf.inc_offset(i);
                         if (resp->buf.size_remain() == 0)
                             resp->buf.init();
                         return resp->cgi.vPar.size();
@@ -548,7 +548,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                     return -1;
                 }
 
-                resp->buf.set_offset(i);
+                resp->buf.inc_offset(i);
                 if (resp->buf.size_remain() == 0)
                     resp->buf.init();
                 return resp->cgi.vPar.size();
@@ -589,7 +589,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
             {
                 if ((header.name == "status") || (header.name == "Status"))
                     sscanf(header.val.c_str(), "%d", &resp->resp_status);
-                resp->buf.set_offset(i);
+                resp->buf.inc_offset(i);
                 resp->cgi.vPar.push_back(header); // add header
                 size = resp->buf.size_remain();
                 if (resp->buf.size_remain() == 0)

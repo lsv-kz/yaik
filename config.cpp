@@ -62,7 +62,7 @@ int absolute_path(string& path)
         return 0;
     }
 
-    char cwd[4096];
+    char cwd[8192];
     if (getcwd(cwd, sizeof(cwd)) == NULL)
     {
         fprintf(stderr, "<%s:%d> Error getcwd(): %s\n", __func__, __LINE__, strerror(errno));

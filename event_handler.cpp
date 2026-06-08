@@ -1076,7 +1076,7 @@ void push_wait_list(Connect *c)
     event_handler_cl.push_wait_list(c);
 }
 //======================================================================
-void close_work_thread()
+void close_event_handler()
 {
     event_handler_cl.close_event_handler();
 }

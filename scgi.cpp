@@ -22,7 +22,7 @@ static int scgi_set_size_data(ByteArray *ba)
         return -1;
 
     ba->cat(",", 1);
-    ba->set_offset(i);
+    ba->inc_offset(i);
 
     return 0;
 }
@@ -273,7 +273,7 @@ int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->cgi.timer = 0;
-            resp->cgi.buf_param.set_offset(ret);
+            resp->cgi.buf_param.inc_offset(ret);
             if (resp->cgi.buf_param.size_remain() == 0)
             {
                 resp->cgi.vPar.clear();

@@ -58,6 +58,7 @@ int main(int argc, char *argv[])
     if (read_conf_file(confPath.c_str()))
         return 1;
     cout << "   ===============================\n";
+    cout << "   DocumentRoot : " << conf->DocumentRoot.c_str() << "\n";
     cout << "   ScriptPath : " << conf->ScriptPath.c_str() << "\n";
     //------------------------------------------------------------------
     create_logfiles(conf->LogPath);

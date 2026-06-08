@@ -297,7 +297,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             else
             {
                 c->client_timer = 0;
-                c->h1->resp.headers.set_offset(ret);
+                c->h1->resp.headers.inc_offset(ret);
                 if (c->h1->resp.headers.size_remain())
                     return ERR_TRY_AGAIN;
                 c->h1->resp.headers.init();
@@ -392,7 +392,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             {
                 if (c->h1->resp.source_data == FROM_DATA_BUFFER)
                     c->h1->resp.resp_content_len -= ret;
-                c->h1->resp.send_data.set_offset(ret);
+                c->h1->resp.send_data.inc_offset(ret);
                 if (c->h1->resp.send_data.size_remain())
                 {
                     //print_err(c, "<%s:%d> write_to_client()=%d, %d/%d\n", __func__, __LINE__,
@@ -760,7 +760,7 @@ int create_response_headers(Connect *c)
     if (c->h1->resp.resp_status == 0)
     {
         print_err(c, "<%s:%d> Error resp_status = 0\n", __func__, __LINE__);
-        c->h1->resp.resp_status = RS500;
+        return -1;
     }
 
     c->h1->resp.headers.cpy_str("HTTP/1.1 ");

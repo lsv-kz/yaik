@@ -261,7 +261,7 @@ public:
     unsigned int get_offset() { return offset; }
     int error() { return err; }
 
-    int set_offset(unsigned int n)
+    int inc_offset(unsigned int n)
     {
         if ((offset + n) > buf_len)
         {

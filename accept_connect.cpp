@@ -340,7 +340,7 @@ void accept_connect()
     }
 
     print_err("<%s:%d> all_conn=%lu, open_conn=%d\n", __func__, __LINE__, allConn, num_conn);
-    close_work_thread();
+    close_event_handler();
     work_thr.join();
     if (poll_fd)
         delete [] poll_fd;

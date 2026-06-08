@@ -496,7 +496,7 @@ int huffman_decode(const char *s, int len, std::string& s_out);
 //----------------------- event_handler.cpp ----------------------------
 void push_wait_list(Connect *c);
 void event_handler();
-void close_work_thread();
+void close_event_handler();
 //---------------------------- ssl.cpp ---------------------------------
 void init_openssl();
 int alpn_select_proto_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
