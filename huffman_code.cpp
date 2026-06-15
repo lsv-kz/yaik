@@ -313,7 +313,7 @@ int huffman_decode(const char *s, int len, std::string& out)
     return 0;
 }
 //======================================================================
-int huffman_encode(const char *in, ByteArray& out)
+int huffman_encode(const char *in, BytesArray& out)
 {
     out.init();
     unsigned int index = 0;

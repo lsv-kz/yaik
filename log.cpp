@@ -19,7 +19,7 @@ void create_logfile(const string& log_dir)
     tm1 = *localtime(&t1);
     strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &tm1);
 
-    ByteArray file_name;
+    BytesArray file_name;
     file_name.cpy(log_dir.c_str(), log_dir.size());
     file_name.cat("/", 1);
     file_name.cat_str(buf);
@@ -45,7 +45,7 @@ void create_error_logfile(const string& log_dir)
     tm1 = *localtime(&t1);
     strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &tm1);
 
-    ByteArray file_name;
+    BytesArray file_name;
     file_name.cpy(log_dir.c_str(), log_dir.size());
     file_name.cat_str("/error_");
     file_name.cat_str(buf);
@@ -77,39 +77,36 @@ void print_err(const char *format, ...)
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
 
-    ByteArray str;
+    BytesArray str;
     str.reserve(330);
     if (str.error())
     {
-        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error BytesArray.reserve()\n", __func__, __LINE__);
         return;
     }
 
     str.cat_str(buf);
+    if (n >= (int)sizeof(buf))
+        str.cat_str("--- overflow ---\n");
 
 mtxLog.lock();
-    if (n < (int)sizeof(buf))
+    write(flog_err, str.ptr(), str.size());
+    num_logerr_records++;
+    if (num_logerr_records > 500000)
     {
-        write(flog_err, str.ptr(), str.size());
-        num_logerr_records++;
-        if (num_logerr_records > 500000)
+        time_t t = time(NULL);
+        if ((t - create_time) <  300)
         {
-            time_t t = time(NULL);
-            if ((t - create_time) <  300)
-            {
-                close(flog_err);
-                flog_err = STDERR_FILENO;
-                exit(1);
-            }
-            else
-                create_time = time(NULL);
             close(flog_err);
-            create_error_logfile(conf->LogPath);
-            num_logerr_records = 0;
+            flog_err = STDERR_FILENO;
+            exit(1);
         }
+        else
+            create_time = time(NULL);
+        close(flog_err);
+        create_error_logfile(conf->LogPath);
+        num_logerr_records = 0;
     }
-    else
-        fprintf(stderr, "<%s:%d> Error buf overflow %d/%d\n", __func__, __LINE__, n, (int)sizeof(buf));
 mtxLog.unlock();
 }
 //======================================================================
@@ -123,11 +120,11 @@ void print_err(Connect *con, const char *format, ...)
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
 
-    ByteArray str;
+    BytesArray str;
     str.reserve(1024);
     if (str.error())
     {
-        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error BytesArray.reserve()\n", __func__, __LINE__);
         return;
     }
 
@@ -137,31 +134,26 @@ void print_err(Connect *con, const char *format, ...)
     str.cat_int(con->numConn);
     str.cat("] ", 2);
     str.cat_str(buf);
+    if (n >= (int)sizeof(buf))
+        str.cat_str("--- overflow ---\n");
 
 mtxLog.lock();
-    if (n < (int)sizeof(buf))
+    write(flog_err, str.ptr(), str.size());
+    num_logerr_records++;
+    if (num_logerr_records > 500000)
     {
-        write(flog_err, str.ptr(), str.size());
-        num_logerr_records++;
-        if (num_logerr_records > 500000)
+        time_t t = time(NULL);
+        if ((t - create_time) <  300)
         {
-            time_t t = time(NULL);
-            if ((t - create_time) <  300)
-            {
-                close(flog_err);
-                flog_err = STDERR_FILENO;
-                exit(1);
-            }
-            else
-                create_time = time(NULL);
             close(flog_err);
-            create_error_logfile(conf->LogPath);
-            num_logerr_records = 0;
+            flog_err = STDERR_FILENO;
+            exit(1);
         }
-    }
-    else
-    {
-        fprintf(stderr, "<%s:%d> Error buf overflow %d/%d\n", __func__, __LINE__, n, (int)sizeof(buf));
+        else
+            create_time = time(NULL);
+        close(flog_err);
+        create_error_logfile(conf->LogPath);
+        num_logerr_records = 0;
     }
 mtxLog.unlock();
 }
@@ -180,11 +172,11 @@ void print_err(Stream *resp, const char *format, ...)
     int n = vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
 
-    ByteArray str;
+    BytesArray str;
     str.reserve(1024);
     if (str.error())
     {
-        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error BytesArray.reserve()\n", __func__, __LINE__);
         return;
     }
 
@@ -196,30 +188,27 @@ void print_err(Stream *resp, const char *format, ...)
     str.cat_int(resp->numReq);
     str.cat("] ", 2);
     str.cat_str(buf);
+    if (n >= (int)sizeof(buf))
+        str.cat_str("--- overflow ---\n");
 
 mtxLog.lock();
-    if (n < (int)sizeof(buf))
+    write(flog_err, str.ptr(), str.size());
+    num_logerr_records++;
+    if (num_logerr_records > 500000)
     {
-        write(flog_err, str.ptr(), str.size());
-        num_logerr_records++;
-        if (num_logerr_records > 500000)
+        time_t t = time(NULL);
+        if ((t - create_time) <  300)
         {
-            time_t t = time(NULL);
-            if ((t - create_time) <  300)
-            {
-                close(flog_err);
-                flog_err = STDERR_FILENO;
-                exit(1);
-            }
-            else
-                create_time = time(NULL);
             close(flog_err);
-            create_error_logfile(conf->LogPath);
-            num_logerr_records = 0;
+            flog_err = STDERR_FILENO;
+            exit(1);
         }
+        else
+            create_time = time(NULL);
+        close(flog_err);
+        create_error_logfile(conf->LogPath);
+        num_logerr_records = 0;
     }
-    else
-        fprintf(stderr, "<%s:%d> Error buf overflow %d/%d\n", __func__, __LINE__, n, (int)sizeof(buf));
 mtxLog.unlock();
 }
 //======================================================================
@@ -227,11 +216,11 @@ void print_log(Connect *c, Stream *resp)
 {
     if (!c || !resp)
         return;
-    ByteArray str;
+    BytesArray str;
     str.reserve(1024);
     if (str.error())
     {
-        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error BytesArray.reserve()\n", __func__, __LINE__);
         return;
     }
 
@@ -291,11 +280,11 @@ void print_log(Connect *c)
         return;
     if (c->Protocol == P_HTTP2)
         return;
-    ByteArray str;
+    BytesArray str;
     str.reserve(1024);
     if (str.error())
     {
-        fprintf(stderr, "<%s:%d> Error ByteArray.reserve()\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error BytesArray.reserve()\n", __func__, __LINE__);
         return;
     }
 

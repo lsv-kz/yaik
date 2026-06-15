@@ -2,8 +2,6 @@
 
 using namespace std;
 //======================================================================
-void fcgi_set_param(Stream *resp);
-//======================================================================
 void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
 {
     int revents = poll_fd[cgi_ind_poll].revents;
@@ -14,7 +12,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
     {
         if (revents == POLLOUT)
         {
-            int ret = write_to_fcgi(c->h1->resp.cgi.fd, c->h1->resp.cgi.buf_param.ptr_remain(), c->h1->resp.cgi.buf_param.size_remain());
+            int ret = write_to_fcgi(c->h1->resp.cgi.fd, c->h1->resp.send_data.ptr_remain(), c->h1->resp.send_data.size_remain());
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
@@ -27,11 +25,17 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             }
 
             c->h1->resp.cgi.timer = 0;
-            c->h1->resp.cgi.buf_param.inc_offset(ret);
-            if (c->h1->resp.cgi.buf_param.size_remain() == 0)
+            c->h1->resp.send_data.inc_offset(ret);
+            if (c->h1->resp.send_data.size_remain() == 0)
             {
-                c->h1->resp.cgi.buf_param.init();
+                c->h1->resp.send_data.init();
                 c->h1->resp.cgi_status = FASTCGI_PARAMS;
+                if (fcgi_create_params(c, &c->h1->resp) < 0)
+                {
+                    print_err(c, "<%s:%d> Error fcgi_create_params()\n", __func__, __LINE__);
+                    c->err = -RS502;
+                    http1_end_request(c);
+                }
             }
         }
         else if (revents != 0)
@@ -46,12 +50,13 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
     {
         if (revents == POLLOUT)
         {
-            if (c->h1->resp.cgi.buf_param.size_remain() == 0)
+            if (c->h1->resp.send_data.size_remain() == 0)
             {
-                fcgi_set_param(&c->h1->resp);
+                c->h1->resp.send_data.cpy("\0\0\0\0\0\0\0\0", 8);
+                fcgi_set_header(&c->h1->resp.send_data, FCGI_PARAMS);
             }
 
-            int ret = write_to_fcgi(c->h1->resp.cgi.fd, c->h1->resp.cgi.buf_param.ptr_remain(), c->h1->resp.cgi.buf_param.size_remain());
+            int ret = write_to_fcgi(c->h1->resp.cgi.fd, c->h1->resp.send_data.ptr_remain(), c->h1->resp.send_data.size_remain());
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
@@ -64,12 +69,11 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             }
 
             c->h1->resp.cgi.timer = 0;
-            c->h1->resp.cgi.buf_param.inc_offset(ret);
-            if (c->h1->resp.cgi.buf_param.size_remain() == 0)
+            c->h1->resp.send_data.inc_offset(ret);
+            if (c->h1->resp.send_data.size_remain() == 0)
             {
-                if (c->h1->resp.cgi.buf_param.size() == 8)
+                if (c->h1->resp.send_data.size() == 8)
                 {
-                    c->h1->resp.cgi.vPar.clear();
                     c->h1->resp.cgi_status = CGI_STDIN;
                     if ((c->h1->resp.post_content_len <= 0) && (c->h1->resp.post_data.size() == 0))
                     {
@@ -78,7 +82,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                     }
                 }
 
-                c->h1->resp.cgi.buf_param.init();
+                c->h1->resp.send_data.init();
             }
         }
         else

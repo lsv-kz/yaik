@@ -42,19 +42,19 @@ const char *base_name(const char *path)
     return path;
 }
 //======================================================================
-int cgi_set_size_chunk(ByteArray *ba)
+int cgi_set_size_chunk(BytesArray *ba)
 {
     const char *hex = "0123456789ABCDEF";
     int size = ba->size_remain() - 8;
     int i = 7;
-    ba->set_byte('\n', ba->get_offset() + i);
+    ba->set_byte('\n', i);
     --i;
-    ba->set_byte('\r', ba->get_offset() + i);
+    ba->set_byte('\r', i);
     --i;
 
     for ( ; i >= 0; --i)
     {
-        ba->set_byte(hex[size % 16], ba->get_offset() + i);
+        ba->set_byte(hex[size % 16], i);
         size /= 16;
         if (size == 0)
             break;
@@ -319,29 +319,6 @@ void EventHandlerClass::http1_get_cgi_headers(Connect *c)
         return;
     }
 
-    for (unsigned int i = 0; i < c->h1->resp.cgi.vPar.size(); ++i)
-    {
-        Param header;
-        header = c->h1->resp.cgi.vPar[i];
-        if (header.name == "Status")
-            continue;
-        /*else if (header.name == "Content-Type")
-        {
-            
-        }
-        else if (header.name == "Location")
-        {
-            
-        }
-        else*/
-        {
-            c->h1->hdrs.cat_str(header.name.c_str());
-            c->h1->hdrs.cat(": ", 2);
-            c->h1->hdrs.cat_str(header.val.c_str());
-            c->h1->hdrs.cat("\r\n", 2);
-        }
-    }
-
     if (c->h1->resp.resp_status == 0)
         c->h1->resp.resp_status = RS200;
     if ((c->h1->resp.httpMethod == M_HEAD) || (c->h1->resp.resp_status == RS204))
@@ -378,4 +355,168 @@ void EventHandlerClass::http1_get_cgi_headers(Connect *c)
         else
             c->h1->resp.send_data.cpy(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
     }
+}
+//======================================================================
+int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
+{
+    const int MAX_HEADER_LEN = 512;
+    const char *p = resp->buf.ptr_remain();
+    unsigned int size = resp->buf.size_remain();
+//fprintf(stderr, "<%s:%d> ----------resp->buf-----------\n%s\n", __func__, __LINE__, array_ptr_remain(&resp->buf));
+    char name[512];
+    char val[512];
+    name[0] = 0;
+    val[0] = 0;
+
+    int name_len = 0;
+    int val_len = 0;
+
+    for (unsigned int i = 0; i < size; )
+    {
+        for ( name_len = 0; i < size; ) // name
+        {
+            if (i > MAX_HEADER_LEN)
+            {
+                print_err(c, "<%s:%d> Error: size of header > %d bytes\n", __func__, __LINE__, i);
+                return -1;
+            }
+
+            char ch = *(p++);
+            ++i;
+            if (ch == ':')
+                break;
+            else if (ch == '\r')
+            {
+                if (name_len)
+                {
+                    print_err(c, "<%s:%d> Error\n", __func__, __LINE__);
+                    return -1;
+                }
+
+                if (i < size)
+                {
+                    ch = *p++;
+                    ++i;
+                    if (ch == '\n') // empty line
+                    {
+                        name[name_len] = 0;
+                        resp->buf.inc_offset(i);
+                        if (resp->buf.size_remain() == 0)
+                            resp->buf.init();
+//fprintf(stderr, "<%s:%d>*** empty line ***\n", __func__, __LINE__);
+                        return 1;
+                    }
+                    else
+                    {
+                        print_err(c, "<%s:%d> Error: \\n not found\n", __func__, __LINE__);
+                        return -1;
+                    }
+                }
+
+                return 0;
+            }
+            else if (ch == '\n') // empty line
+            {
+                if (name_len)
+                {
+                    print_err(c, "<%s:%d> Error\n", __func__, __LINE__);
+                    return -1;
+                }
+//fprintf(stderr, "<%s:%d>*** empty line ***\n", __func__, __LINE__);
+                resp->buf.inc_offset(i);
+                if (resp->buf.size_remain() == 0)
+                    resp->buf.init();
+                return 1;
+            }
+            else if (ch == 0)
+            {
+                print_err(c, "<%s:%d> Error: character = 0\n", __func__, __LINE__);
+                return -1;
+            }
+            else
+            {
+                name[name_len++] = ch;
+                if ((int)sizeof(name) <= name_len)
+                {
+                    print_err(c, "<%s:%d> Error: names size >= %d\n", __func__, __LINE__, name_len);
+                    return -1;
+                }
+            }
+        }
+
+        name[name_len] = 0;
+
+        if (i == size)
+            return 0;
+        if (lower_case)
+        {
+            for (int n = 0; n < name_len; ++n)
+            {
+                name[n] = tolower(name[n]);
+            }
+        }
+
+        for ( val_len = 0; i < size; ) // value
+        {
+            if (i > MAX_HEADER_LEN)
+            {
+                print_err(c, "<%s:%d> Error: size of header > %d bytes\n", __func__, __LINE__, i);
+                return -1;
+            }
+
+            char ch = *(p++);
+            ++i;
+
+            if (ch == '\r')
+                continue;
+            else if (ch == '\n')
+            {
+                val[val_len] = 0;
+                if (!strcmp_case(name, "status"))
+                {
+                    sscanf(val, "%d", &resp->resp_status);
+                }
+                else
+                {
+                    // add header
+                    if (c->Protocol == P_HTTP1)
+                    {
+                        c->h1->hdrs.cat(name, name_len);
+                        c->h1->hdrs.cat(": ", 2);
+                        c->h1->hdrs.cat(val, val_len);
+                        c->h1->hdrs.cat("\r\n", 2);
+                    }
+                    else if (c->Protocol == P_HTTP2)
+                    {
+                        //print_err(resp, "<%s:%d> [%s: %s]\n", __func__, __LINE__, name, val);
+                        add_cgi_header(resp, name, val);
+                    }
+                }
+                
+                resp->buf.inc_offset(i);
+                size = resp->buf.size_remain();
+                if (resp->buf.size_remain() == 0)
+                    resp->buf.init();
+                i = 0;
+                break;
+            }
+            else if (ch == 0)
+            {
+                print_err(c, "<%s:%d> Error: character = 0\n", __func__, __LINE__);
+                return -1;
+            }
+            else if (ch == ' ')
+            {
+                if (val_len)
+                    val[val_len++] = ch;
+            }
+            else
+                val[val_len++] = ch;
+        }
+
+        if (i == size)
+            return 0;
+    }
+
+    return 0;
 }

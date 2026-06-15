@@ -289,12 +289,13 @@ struct Stream
     std::string sReqContentType;
     std::string sReqContentLen;
 
-    ByteArray buf;
-    ByteArray headers;
-    ByteArray send_data;
-    ByteArray post_data;
-    ByteArray rst_stream;
-    ByteArray frame_win_update;
+    BytesArray buf;
+    BytesArray headers;
+    BytesArray cgi_headers;
+    BytesArray send_data;
+    BytesArray post_data;
+    BytesArray rst_stream;
+    BytesArray frame_win_update;
 
     int resp_status;
     const char *resp_content_type;
@@ -333,8 +334,6 @@ struct Stream
         int fd;
         int i_param;
         int size_par;
-        std::vector <Param> vPar;
-        ByteArray buf_param;
         int fcgi_type;
         int fcgiContentLen;
         int fcgiPaddingLen;
@@ -414,6 +413,7 @@ struct Stream
         send_data.init();
         post_data.init();
         headers.init();
+        cgi_headers.init();
 
         httpMethod = M_NULL;
         sReqContentType.clear();
@@ -443,7 +443,6 @@ struct Stream
         cgi.fd = cgi.to_script = cgi.from_script = -1;
         cgi.fcgi_type = 0;
         cgi.fcgiContentLen = cgi.fcgiPaddingLen = 0;
-        cgi.vPar.clear();
     }
 
 private:

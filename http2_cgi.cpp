@@ -2,9 +2,6 @@
 
 using namespace std;
 //======================================================================
-const char *get_script_name(const char *name);
-const char *base_name(const char *path);
-//======================================================================
 int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cgi_serv)
 {
     struct stat st;
@@ -16,7 +13,7 @@ int EventHandlerClass::cgi_fork(Connect *c, Stream *resp, int* serv_cgi, int* cg
     }
     else if (resp->cgi_type == PHPCGI)
     {
-        resp->cgi.path = conf->DocumentRoot;
+        resp->cgi.path = resp->vhost->DocumentRoot;
         resp->cgi.path += resp->clean_decode_path;
     }
 
@@ -485,4 +482,42 @@ void EventHandlerClass::cgi_worker(Connect *c, Stream *resp, int cgi_ind_poll)
             resp->cgi.end = true;
         }
     }
+}
+//======================================================================
+void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
+{
+    int ret = cgi_parse_headers(c, resp, true);
+    if (ret < 0)
+    {
+        print_err(resp, "<%s:%d> Error cgi_parse_headers() = -1\n", __func__, __LINE__);
+        set_error_message(c, resp, RS502);
+        return;
+    }
+    else if (ret == 0)
+    {
+        //print_err(resp, "<%s:%d> cgi_parse_headers() = 0\n", __func__, __LINE__);
+        return;
+    }
+
+    set_frame_headers(resp);
+    char str_status[32];
+    snprintf(str_status, sizeof(str_status), "%d", resp->resp_status);
+    add_header(resp, 8, str_status);                      // :status
+    add_header(resp, 54, conf->ServerSoftware.c_str());   // server
+    add_header(resp, 33, get_time().c_str());             // date
+    add_cgi_headers(resp);
+//hex_print_stderr(__func__, __LINE__, resp->headers.ptr(), resp->headers.size());
+    if (resp->resp_status == RS204)
+    {
+        add_header(resp, 28, "0");
+        set_frame_flags(&resp->headers, FLAG_END_STREAM);
+        resp->create_headers = true;
+        resp->cgi.end = true;
+        resp->buf.init();
+        return;
+    }
+
+    if (resp->buf.size_remain() == 0)
+        resp->buf.init();
+    resp->create_headers = true;
 }

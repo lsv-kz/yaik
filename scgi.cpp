@@ -3,9 +3,8 @@
 using namespace std;
 //======================================================================
 static int scgi_create_params(Connect *c, Stream *resp);
-static int scgi_set_param(Stream *r);
 //======================================================================
-static int scgi_set_size_data(ByteArray *ba)
+static int scgi_set_size_data(BytesArray *ba)
 {
     ba->set_byte(':', 7);
     int i = 6;
@@ -43,7 +42,6 @@ int scgi_create_connect(Connect *c, Stream *resp)
     {
         resp->cgi.timer = 0;
         c->client_timer = 0;
-        resp->send_data.init();
         int opt = 1;
         ioctl(resp->cgi.fd, FIONBIO, &opt);
     }
@@ -52,207 +50,177 @@ int scgi_create_connect(Connect *c, Stream *resp)
     return 0;
 }
 //======================================================================
-int scgi_create_params(Connect *c, Stream *resp)
+int scgi_add_param(Stream *resp, const char *name, const char *val, int len_val)
 {
-    int i = 0;
-    Param param;
-    resp->cgi.vPar.clear();
-    if (resp->cgi.vPar.capacity() < 50)
-        resp->cgi.vPar.reserve(50);
-
-    if (resp->httpMethod == M_POST)
+    if (name == NULL)
     {
-        param.name = "CONTENT_LENGTH";
-        if (resp->sReqContentLen.size())
-            param.val = resp->sReqContentLen;
-        else
-            param.val = "0";
-        resp->cgi.vPar.push_back(param);
-        ++i;
-
-        param.name = "CONTENT_TYPE";
-        if (resp->sReqContentType.size())
-            param.val = resp->sReqContentType.c_str();
-        else
-            param.val = "";
-        resp->cgi.vPar.push_back(param);
-        ++i;
-    }
-    else
-    {
-        param.name = "CONTENT_LENGTH";
-        param.val = "0";
-        resp->cgi.vPar.push_back(param);
-        ++i;
-
-        param.name = "CONTENT_TYPE";
-        param.val = "";
-        resp->cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "PATH";
-    param.val = "/bin:/usr/bin:/usr/local/bin";
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_SOFTWARE";
-    param.val = conf->ServerSoftware;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SCGI";
-    param.val = "1";
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "DOCUMENT_ROOT";
-    param.val = resp->vhost->DocumentRoot;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "DOCUMENT_URI";
-    param.val = resp->clean_decode_path;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REQUEST_URI";
-    param.val = resp->path;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_ADDR";
-    param.val = c->remoteAddr;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_PORT";
-    param.val = c->remotePort;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REQUEST_METHOD";
-    param.val = get_str_method(resp->httpMethod);
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_PROTOCOL";
-    if (c->Protocol == P_HTTP2)
-        param.val = "HTTP/2.0";
-    else
-        param.val = "HTTP/1.1";
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_PORT";
-    param.val = c->ServerPort;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    if (resp->host.size())
-    {
-        param.name = "HTTP_HOST";
-        param.val = resp->host;
-        resp->cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (resp->referer.size())
-    {
-        param.name = "HTTP_REFERER";
-        param.val = resp->referer;
-        resp->cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (resp->user_agent.size())
-    {
-        param.name = "HTTP_USER_AGENT";
-        param.val = resp->user_agent;
-        resp->cgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "SCRIPT_NAME";
-    param.val = resp->clean_decode_path;
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "QUERY_STRING";
-    if (resp->query_string.size())
-        param.val = resp->query_string;
-    else
-        param.val = "";
-    resp->cgi.vPar.push_back(param);
-    ++i;
-
-    if (i != (int)resp->cgi.vPar.size())
-    {
-        print_err(resp, "<%s:%d> Error: create scgi param list\n", __func__, __LINE__);
+        print_err("[%d/%d]<%s:%d> Error: name=NULL\n", resp->numConn, resp->numReq, __func__, __LINE__);
         return -1;
     }
 
-    resp->cgi.size_par = i;
-    resp->cgi.i_param = 0;
+    int len_name = strlen(name);
 
-    int ret = scgi_set_param(resp);
-    if (ret <= 0)
+    if (val == NULL)
+        len_val = 0;
+
+    int len = len_name + len_val + 2;
+    if ((len + resp->send_data.size()) > 16000)
     {
-        print_err(resp, "<%s:%d> Error scgi_set_param()\n", __func__, __LINE__);
-        return -RS502;
+        print_err("[%d/%d]<%s:%d> Error: name=NULL\n", resp->numConn, resp->numReq, __func__, __LINE__);
+        return -1;
     }
+
+    resp->send_data.cat(name, len_name);
+    resp->send_data.cat("\0", 1);
+
+    if (len_val > 0)
+    {
+        resp->send_data.cat(val, len_val);
+    }
+
+    resp->send_data.cat("\0", 1);
 
     return 0;
 }
 //======================================================================
-int scgi_set_param(Stream *resp)
+int scgi_create_params(Connect *c, Stream *resp)
 {
-    resp->cgi.buf_param.cpy("\0\0\0\0\0\0\0\0", 8);
-    for ( ; resp->cgi.i_param < resp->cgi.size_par; ++resp->cgi.i_param)
+    int ret = 0;
+    resp->send_data.cpy("\0\0\0\0\0\0\0\0", 8);
+    resp->send_data.reserve(768);
+
+    if (resp->httpMethod == M_POST)
     {
-        int len_name = resp->cgi.vPar[resp->cgi.i_param].name.size();
-        if (len_name == 0)
+        if (resp->sReqContentLen.size())
         {
-            print_err(resp, "<%s:%d> Error: len_name=0\n", __func__, __LINE__);
-            return -RS502;
+            ret += scgi_add_param(resp,
+                    "CONTENT_LENGTH", 
+                    resp->sReqContentLen.c_str(), resp->sReqContentLen.size());
         }
+        else
+            ret += scgi_add_param(resp,
+                    "CONTENT_LENGTH", 
+                    "0", 1);
 
-        int len_val = resp->cgi.vPar[resp->cgi.i_param].val.size();
-        int len = len_name + len_val + 2;
-
-        if ((len + resp->cgi.buf_param.size()) > 16000)
-        {
-            break;
-        }
-
-        resp->cgi.buf_param.cat(resp->cgi.vPar[resp->cgi.i_param].name.c_str(), len_name);
-        resp ->cgi.buf_param.cat("\0", 1);
-
-        if (len_val > 0)
-        {
-            resp->cgi.buf_param.cat(resp->cgi.vPar[resp->cgi.i_param].val.c_str(), len_val);
-        }
-
-        resp->cgi.buf_param.cat("\0", 1);
-    }
-
-    if(resp->cgi.i_param < resp->cgi.size_par)
-    {
-        print_err(resp, "<%s:%d> Error: size of param > size of buf\n", __func__, __LINE__);
-        return -RS502;
-    }
-
-    if (resp->cgi.buf_param.size())
-    {
-        scgi_set_size_data(&resp->cgi.buf_param);
+        ret += scgi_add_param(resp,
+                    "CONTENT_TYPE",
+                    resp->sReqContentType.c_str(), resp->sReqContentType.size());
     }
     else
     {
-        print_err(resp, "<%s:%d> Error: size param = 0\n", __func__, __LINE__);
+        ret += scgi_add_param(resp,
+                    "CONTENT_LENGTH",
+                    "0", 1);
+
+        ret += scgi_add_param(resp,
+                    "CONTENT_TYPE",
+                    NULL, 0);
+    }
+
+    ret += scgi_add_param(resp,
+                    "PATH",
+                    "/bin:/usr/bin:/usr/local/bin", 28);
+
+    ret += scgi_add_param(resp,
+                    "SERVER_SOFTWARE",
+                    conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
+
+    ret += scgi_add_param(resp,
+                    "SCGI",
+                    "1", 1);
+
+    ret += scgi_add_param(resp,
+                    "DOCUMENT_ROOT",
+                    resp->vhost->DocumentRoot.c_str(), resp->vhost->DocumentRoot.size());
+
+    ret += scgi_add_param(resp,
+                    "DOCUMENT_URI",
+                    resp->clean_decode_path, strlen(resp->clean_decode_path));
+
+    ret += scgi_add_param(resp,
+                    "REQUEST_URI",
+                    resp->path.c_str(), resp->path.size());
+
+    ret += scgi_add_param(resp,
+                    "REMOTE_ADDR",
+                    c->remoteAddr, strlen(c->remoteAddr));
+
+    ret += scgi_add_param(resp,
+                    "REMOTE_PORT",
+                    c->remotePort, strlen(c->remotePort));
+
+    ret += scgi_add_param(resp,
+                    "REQUEST_METHOD",
+                    get_str_method(resp->httpMethod), strlen(get_str_method(resp->httpMethod)));
+
+    if (c->Protocol == P_HTTP2)
+    {
+        ret += scgi_add_param(resp,
+                    "SERVER_PROTOCOL",
+                    "HTTP/2.0", 8);
+    }
+    else
+    {
+        ret += scgi_add_param(resp,
+                    "SERVER_PROTOCOL",
+                    "HTTP/1.1", 8);
+    }
+
+    ret += scgi_add_param(resp,
+                    "SERVER_PORT",
+                    c->ServerPort.c_str(), c->ServerPort.size());
+
+    if (resp->host.size())
+    {
+        ret += scgi_add_param(resp,
+                    "HTTP_HOST",
+                    resp->host.c_str(), resp->host.size());
+    }
+
+    if (resp->referer.size())
+    {
+        ret += scgi_add_param(resp,
+                    "HTTP_REFERER",
+                    resp->referer.c_str(), resp->referer.size());
+    }
+
+    if (resp->user_agent.size())
+    {
+        ret += scgi_add_param(resp,
+                    "HTTP_USER_AGENT",
+                    resp->user_agent.c_str(), resp->user_agent.size());
+    }
+
+    ret += scgi_add_param(resp,
+                    "SCRIPT_NAME",
+                    resp->clean_decode_path, strlen(resp->clean_decode_path));
+
+    if (resp->query_string.size())
+    {
+        ret += scgi_add_param(resp,
+                    "QUERY_STRING",
+                    resp->query_string.c_str(), resp->query_string.size());
+    }
+    else
+    {
+        ret += scgi_add_param(resp,
+                    "QUERY_STRING",
+                    NULL, 0);
+    }
+
+    if (ret)
+    {
+        print_err(c, "[%d]<%s:%d> Error scgi_set_param()\n", resp->numReq, __func__, __LINE__);
         return -RS502;
     }
 
-    return resp->cgi.buf_param.size();
+    if (scgi_set_size_data(&resp->send_data) < 0)
+    {
+        print_err(resp, "<%s:%d> Error scgi_set_size_data()\n", __func__, __LINE__);
+        return -RS502;
+    }
+
+    return 0;
 }
 //======================================================================
 int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
@@ -263,7 +231,7 @@ int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
     {
         if (revents == POLLOUT)
         {
-            int ret = write_to_fcgi(resp->cgi.fd, resp->cgi.buf_param.ptr_remain(), resp->cgi.buf_param.size_remain());
+            int ret = write_to_fcgi(resp->cgi.fd, resp->send_data.ptr_remain(), resp->send_data.size_remain());
             if (ret < 0)
             {
                 if (ret == ERR_TRY_AGAIN)
@@ -273,11 +241,10 @@ int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->cgi.timer = 0;
-            resp->cgi.buf_param.inc_offset(ret);
-            if (resp->cgi.buf_param.size_remain() == 0)
+            resp->send_data.inc_offset(ret);
+            if (resp->send_data.size_remain() == 0)
             {
-                resp->cgi.vPar.clear();
-                resp->cgi.buf_param.init();
+                resp->send_data.init();
                 if (resp->httpMethod == M_POST)
                 {
                     if ((resp->post_content_len <= 0) && (resp->post_data.size() == 0))

@@ -364,8 +364,8 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
         {
             if (ret != ERR_TRY_AGAIN)
             {
-                print_err(c, "<%s:%d> Error send data: %d, send %lld bytes, %d/%d\n", __func__, __LINE__,
-                    ret, c->h1->resp.send_bytes, c->h1->resp.send_data.size_remain(), c->h1->resp.send_data.size());
+                print_err(c, "<%s:%d> Error send data: %d, send %lld bytes\n", __func__, __LINE__,
+                            ret, c->h1->resp.send_bytes);
                 c->err = ret;
                 http1_end_request(c);
                 return -1;
@@ -492,8 +492,11 @@ void EventHandlerClass::http1_end_request(Connect *c)
             }
         }
 
-        c->h1->resp.cgi.start = false;
-        --cgi_num_work;
+        if (c->h1->resp.cgi.start)
+        {
+            --cgi_num_work;
+            c->h1->resp.cgi.start = false;
+        }
     }
     else
     {

@@ -72,7 +72,7 @@ bool cmp(const string &a, const string &b)
     return i;
 }
 //======================================================================
-int create_index_html(Connect *r, vector<string>& list, int num_files, const char *dir_path, const char *uri, ByteArray *html)
+int create_index_html(Connect *c, vector<string>& list, int num_files, const char *dir_path, const char *uri, BytesArray *html)
 {
     int n, i;
     struct stat st;
@@ -80,7 +80,7 @@ int create_index_html(Connect *r, vector<string>& list, int num_files, const cha
     char *file_path = (char*)malloc(dir_path_len + NAME_MAX + 1);
     if (file_path == NULL)
     {
-        print_err(r, "<%s:%d>  Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        print_err(c, "<%s:%d>  Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
         return -RS500;
     }
 
@@ -132,7 +132,7 @@ int create_index_html(Connect *r, vector<string>& list, int num_files, const cha
 
         if (!encode(list[i].c_str(), buf, sizeof(buf)))
         {
-            print_err(r, "<%s:%d> Error: encode()\n", __func__, __LINE__);
+            print_err(c, "<%s:%d> Error: encode()\n", __func__, __LINE__);
             continue;
         }
 
@@ -158,7 +158,7 @@ int create_index_html(Connect *r, vector<string>& list, int num_files, const cha
 
         if (!encode(list[i].c_str(), buf, sizeof(buf)))
         {
-            print_err(r, "<%s:%d> Error: encode()\n", __func__, __LINE__);
+            print_err(c, "<%s:%d> Error: encode()\n", __func__, __LINE__);
             continue;
         }
 
@@ -232,7 +232,7 @@ int create_index_html(Connect *r, vector<string>& list, int num_files, const cha
     return 0;
 }
 //======================================================================
-int index_dir(Connect *r, const char *dir_path, const char *uri, ByteArray *html)
+int index_dir(Connect *c, const char *dir_path, const char *uri, BytesArray *html)
 {
     DIR *dir;
     struct dirent *dirbuf;
@@ -241,7 +241,7 @@ int index_dir(Connect *r, const char *dir_path, const char *uri, ByteArray *html
 
     if (dir_path == NULL)
     {
-        print_err(r, "<%s:%d>  Error dir_path = NULL\n", __func__, __LINE__);
+        print_err(c, "<%s:%d>  Error dir_path = NULL\n", __func__, __LINE__);
         return -RS500;
     }
 
@@ -255,7 +255,7 @@ int index_dir(Connect *r, const char *dir_path, const char *uri, ByteArray *html
             return -RS403;
         else
         {
-            print_err(r, "<%s:%d>  Error opendir(\"%s\"): %s\n", __func__, __LINE__, dir_path, strerror(errno));
+            print_err(c, "<%s:%d>  Error opendir(\"%s\"): %s\n", __func__, __LINE__, dir_path, strerror(errno));
             return -RS500;
         }
     }
@@ -271,5 +271,5 @@ int index_dir(Connect *r, const char *dir_path, const char *uri, ByteArray *html
     closedir(dir);
     sort(list.begin(), list.end(), cmp);
     html->reserve(num_files * 100);
-    return create_index_html(r, list, num_files, dir_path, uri, html);
+    return create_index_html(c, list, num_files, dir_path, uri, html);
 }

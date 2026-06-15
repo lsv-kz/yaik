@@ -2,7 +2,7 @@
 
 using namespace std;
 //======================================================================
-void fcgi_set_header(ByteArray* ba, unsigned char type)
+void fcgi_set_header(BytesArray* ba, unsigned char type)
 {
     int dataLen = ba->size() - 8;
 
@@ -28,203 +28,183 @@ void fcgi_set_header(char *s, unsigned char type, int dataLen)
     s[7] = 0;
 }
 //======================================================================
-void fcgi_set_param(Stream *resp)
+int fcgi_add_param(Stream *resp, const char *name, const char *val, int len_val)
 {
-    resp->cgi.buf_param.reserve(4096);
-    resp->cgi.buf_param.cpy("\0\0\0\0\0\0\0\0", 8);
-
-    for ( ; resp->cgi.i_param < resp->cgi.size_par; ++resp->cgi.i_param)
+    if (name == NULL)
     {
-        int len_name = resp->cgi.vPar[resp->cgi.i_param].name.size();
-        int len_val = resp->cgi.vPar[resp->cgi.i_param].val.size();
-
-        char s[8], *p = s;
-        int i = 0;
-
-        if (len_name < 0x80)
-        {
-            *(p++) = (unsigned char)len_name;
-            ++i;
-        }
-        else
-        {
-            *(p++) = (unsigned char)((len_name >> 24) | 0x80);
-            *(p++) = (unsigned char)(len_name >> 16);
-            *(p++) = (unsigned char)(len_name >> 8);
-            *(p++) = (unsigned char)len_name;
-            i += 4;
-        }
-
-        if (len_val < 0x80)
-        {
-            *(p++) = (unsigned char)len_val;
-            ++i;
-        }
-        else
-        {
-            *(p++) = (unsigned char)((len_val >> 24) | 0x80);
-            *(p++) = (unsigned char)(len_val >> 16);
-            *(p++) = (unsigned char)(len_val >> 8);
-            *(p++) = (unsigned char)len_val;
-            i += 4;
-        }
-
-        resp->cgi.buf_param.cat(s, i);
-        resp->cgi.buf_param.cat(resp->cgi.vPar[resp->cgi.i_param].name.c_str(), len_name);
-        if (len_val > 0)
-        {
-            resp->cgi.buf_param.cat(resp->cgi.vPar[resp->cgi.i_param].val.c_str(), len_val);
-        }
+        print_err(resp, "<%s:%d> Error: name=NULL\n", __func__, __LINE__);
+        return -1;
     }
 
-    fcgi_set_header(&resp->cgi.buf_param, FCGI_PARAMS);
+    int len_name = strlen(name);
+    if (val == NULL)
+        len_val = 0;
+    char s[8], *p = s;
+    int i = 0;
+
+    if (len_name < 0x80)
+    {
+        *(p++) = (unsigned char)len_name;
+        ++i;
+    }
+    else
+    {
+        *(p++) = (unsigned char)((len_name >> 24) | 0x80);
+        *(p++) = (unsigned char)(len_name >> 16);
+        *(p++) = (unsigned char)(len_name >> 8);
+        *(p++) = (unsigned char)len_name;
+        i += 4;
+    }
+
+    if (len_val < 0x80)
+    {
+        *(p++) = (unsigned char)len_val;
+        ++i;
+    }
+    else
+    {
+        *(p++) = (unsigned char)((len_val >> 24) | 0x80);
+        *(p++) = (unsigned char)(len_val >> 16);
+        *(p++) = (unsigned char)(len_val >> 8);
+        *(p++) = (unsigned char)len_val;
+        i += 4;
+    }
+
+    resp->send_data.cat(s, i);
+    resp->send_data.cat(name, len_name);
+    if (len_val > 0)
+    {
+        resp->send_data.cat(val, len_val);
+    }
+
+    return 0;
 }
 //======================================================================
 int fcgi_create_params(Connect *c, Stream *resp)
 {
-    int i = 0;
-    Param param;
-    resp->cgi.vPar.clear();
-    if (resp->cgi.vPar.capacity() < 50)
-        resp->cgi.vPar.reserve(50);
+    int ret = 0;
+    resp->send_data.reserve(4096);
+    resp->send_data.cpy("\0\0\0\0\0\0\0\0", 8);
 
     if (resp->cgi_type == PHPFPM)
     {
-        param.name = "REDIRECT_STATUS";
-        param.val = "true";
-        resp->cgi.vPar.push_back(param);
-        ++i;
+        ret += fcgi_add_param(resp, "REDIRECT_STATUS", "true", 4);
     }
 
-    param.name = "PATH";
-    param.val = "/bin:/usr/bin:/usr/local/bin";
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp, "PATH", "/bin:/usr/bin:/usr/local/bin", 28);
 
-    param.name = "SERVER_SOFTWARE";
-    param.val = conf->ServerSoftware;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp, 
+            "SERVER_SOFTWARE",
+            conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
 
-    param.name = "GATEWAY_INTERFACE";
-    param.val = "CGI/1.1";
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp, 
+            "GATEWAY_INTERFACE",
+            "CGI/1.1", 7);
 
-    param.name = "DOCUMENT_ROOT";
-    param.val = resp->vhost->DocumentRoot;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp, 
+            "DOCUMENT_ROOT",
+            resp->vhost->DocumentRoot.c_str(), resp->vhost->DocumentRoot.size());
 
-    param.name = "DOCUMENT_URI";
-    param.val = resp->clean_decode_path;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "DOCUMENT_URI",
+                    resp->clean_decode_path, strlen(resp->clean_decode_path));
 
-    param.name = "REQUEST_URI";
-    param.val = resp->path;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "REQUEST_URI",
+                    resp->path.c_str(), resp->path.size());
 
-    param.name = "REMOTE_ADDR";
-    param.val = c->remoteAddr;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "REMOTE_ADDR",
+                    c->remoteAddr, strlen(c->remoteAddr));
 
-    param.name = "REMOTE_PORT";
-    param.val = c->remotePort;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "REMOTE_PORT",
+                    c->remotePort, strlen(c->remotePort));
 
-    param.name = "REQUEST_METHOD";
-    param.val = get_str_method(resp->httpMethod);
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "REQUEST_METHOD",
+                    get_str_method(resp->httpMethod), strlen(get_str_method(resp->httpMethod)));
 
-    param.name = "SERVER_PROTOCOL";
     if (c->Protocol == P_HTTP2)
-        param.val = "HTTP/2.0";
+    {
+        ret += fcgi_add_param(resp,
+                    "SERVER_PROTOCOL",
+                    "HTTP/2.0", 8);
+    }
     else
-        param.val = "HTTP/1.1";
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    {
+        ret += fcgi_add_param(resp,
+                    "SERVER_PROTOCOL",
+                    "HTTP/1.1", 8);
+    }
 
-    param.name = "SERVER_PORT";
-    param.val = c->ServerPort;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "SERVER_PORT",
+                    c->ServerPort.c_str(), c->ServerPort.size());
 
     if (resp->host.size())
     {
-        param.name = "HTTP_HOST";
-        param.val = resp->host;
-        resp->cgi.vPar.push_back(param);
-        ++i;
+        ret += fcgi_add_param(resp,
+                    "HTTP_HOST",
+                    resp->host.c_str(), resp->host.size());
     }
 
     if (resp->referer.size())
     {
-        param.name = "HTTP_REFERER";
-        param.val = resp->referer;
-        resp->cgi.vPar.push_back(param);
-        ++i;
+        ret += fcgi_add_param(resp,
+                    "HTTP_REFERER",
+                    resp->referer.c_str(), resp->referer.size());
     }
 
     if (resp->user_agent.size())
     {
-        param.name = "HTTP_USER_AGENT";
-        param.val = resp->user_agent;
-        resp->cgi.vPar.push_back(param);
-        ++i;
+        ret += fcgi_add_param(resp,
+                    "HTTP_USER_AGENT",
+                    resp->user_agent.c_str(), resp->user_agent.size());
     }
 
-    param.name = "SCRIPT_NAME";
-    param.val = resp->clean_decode_path;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "SCRIPT_NAME",
+                    resp->clean_decode_path, strlen(resp->clean_decode_path));
 
     if (resp->cgi_type == PHPFPM)
     {
-        param.name = "SCRIPT_FILENAME";
-        param.val = resp->vhost->DocumentRoot + resp->clean_decode_path;
-        resp->cgi.vPar.push_back(param);
-        ++i;
+        resp->cgi.path = resp->vhost->DocumentRoot;
+        resp->cgi.path += resp->clean_decode_path;
+        ret += fcgi_add_param(resp,
+                    "SCRIPT_FILENAME",
+                    resp->cgi.path.c_str(), resp->cgi.path.size());
     }
 
     if (resp->httpMethod == M_POST)
     {
         if (resp->sReqContentType.size())
         {
-            param.name = "CONTENT_TYPE";
-            param.val = resp->sReqContentType.c_str();
-            resp->cgi.vPar.push_back(param);
-            ++i;
+            ret += fcgi_add_param(resp,
+                    "CONTENT_TYPE",
+                    resp->sReqContentType.c_str(), resp->sReqContentType.size());
         }
 
         if (resp->sReqContentLen.size())
         {
-            param.name = "CONTENT_LENGTH";
-            param.val = resp->sReqContentLen;
-            resp->cgi.vPar.push_back(param);
-            ++i;
+            ret += fcgi_add_param(resp,
+                        "CONTENT_LENGTH", 
+                        resp->sReqContentLen.c_str(), resp->sReqContentLen.size());
         }
     }
 
-    param.name = "QUERY_STRING";
-    param.val = resp->query_string;
-    resp->cgi.vPar.push_back(param);
-    ++i;
+    ret += fcgi_add_param(resp,
+                    "QUERY_STRING",
+                    resp->query_string.c_str(), resp->query_string.size());
 
-    if (i != (int)resp->cgi.vPar.size())
+    if (ret)
     {
-        print_err(resp, "<%s:%d> Error: create fcgi param list\n", __func__, __LINE__);
+        print_err(resp, "<%s:%d> Error: create fcgi param\n", __func__, __LINE__);
         return -RS500;
     }
 
-    resp->cgi.size_par = i;
-    resp->cgi.i_param = 0;
     resp->cgi.timer = 0;
-
+    fcgi_set_header(&resp->send_data, FCGI_PARAMS);
     return 0;
 }
 //======================================================================
@@ -260,11 +240,7 @@ int fcgi_create_connect(Connect *c, Stream *resp)
     s[9] = (unsigned char) (FCGI_RESPONDER        & 0xff);
     s[10] = (unsigned char) 0;
     memset(s + 11, 0, 5);
-    resp->cgi.buf_param.cpy(s, 16);
-
-    int ret = fcgi_create_params(c, resp);
-    if (ret < 0)
-        return -1;
+    resp->send_data.cpy(s, 16);
     resp->cgi_status = FASTCGI_BEGIN;
     return 0;
 }
@@ -279,7 +255,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
     {
         if (revents == POLLOUT)
         {
-            int ret = write_to_fcgi(resp->cgi.fd, resp->cgi.buf_param.ptr_remain(), resp->cgi.buf_param.size_remain());
+            int ret = write_to_fcgi(resp->cgi.fd, resp->send_data.ptr_remain(), resp->send_data.size_remain());
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
@@ -288,11 +264,16 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->cgi.timer = 0;
-            resp->cgi.buf_param.inc_offset(ret);
-            if (resp->cgi.buf_param.size_remain() == 0)
+            resp->send_data.inc_offset(ret);
+            if (resp->send_data.size_remain() == 0)
             {
-                resp->cgi.buf_param.init();
+                resp->send_data.init();
                 resp->cgi_status = FASTCGI_PARAMS;
+                if (fcgi_create_params(c, resp) < 0)
+                {
+                    print_err(resp, "<%s:%d> Error fcgi_create_params()\n", __func__, __LINE__);
+                    set_error_message(c, resp, RS502);
+                }
             }
         }
         else if (revents != 0)
@@ -306,12 +287,13 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
     {
         if (revents == POLLOUT)
         {
-            if (resp->cgi.buf_param.size_remain() == 0)
+            if (resp->send_data.size_remain() == 0)
             {
-                fcgi_set_param(resp);
+                resp->send_data.cpy("\0\0\0\0\0\0\0\0", 8);
+                fcgi_set_header(&resp->send_data, FCGI_PARAMS);
             }
 
-            int ret = write_to_fcgi(resp->cgi.fd, resp->cgi.buf_param.ptr_remain(), resp->cgi.buf_param.size_remain());
+            int ret = write_to_fcgi(resp->cgi.fd, resp->send_data.ptr_remain(), resp->send_data.size_remain());
             if (ret < 0)
             {
                 if (ret != ERR_TRY_AGAIN)
@@ -320,12 +302,11 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
 
             resp->cgi.timer = 0;
-            resp->cgi.buf_param.inc_offset(ret);
-            if (resp->cgi.buf_param.size_remain() == 0)
+            resp->send_data.inc_offset(ret);
+            if (resp->send_data.size_remain() == 0)
             {
-                if (resp->cgi.buf_param.size() == 8)
+                if (resp->send_data.size() == 8)
                 {
-                    resp->cgi.vPar.clear();
                     resp->cgi_status = CGI_STDIN;
                     if ((resp->post_content_len == 0) && (resp->post_data.size() == 0))
                     {
@@ -335,7 +316,7 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
                     }
                 }
 
-                resp->cgi.buf_param.init();
+                resp->send_data.init();
             }
         }
         else
@@ -374,7 +355,9 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             resp->cgi.timer = 0;
             resp->post_data.init();
             if (resp->post_content_len < 0)
+            {
                 resp->cgi_status = CGI_STDOUT;
+            }
         }
         else
         {
@@ -486,188 +469,4 @@ void EventHandlerClass::fcgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
             }
         }
     }
-}
-//======================================================================
-int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
-{
-    const int MAX_HEADER_LEN = 512;
-    const char *p = resp->buf.ptr_remain();
-    unsigned int size = resp->buf.size_remain();
-    Param header;
-
-    for (unsigned int i = 0; i < size; )
-    {
-        header.name = "";
-        header.val = "";
-
-        for ( ; i < size; ) // name
-        {
-            if (i > MAX_HEADER_LEN)
-            {
-                print_err(resp, "<%s:%d> Error: size of header > %d bytes\n", __func__, __LINE__, i);
-                return -1;
-            }
-
-            char ch = *(p++);
-            ++i;
-            if (ch == ':')
-                break;
-            else if (ch == '\r')
-            {
-                if (header.name.size())
-                {
-                    print_err(resp, "<%s:%d> Error\n", __func__, __LINE__);
-                    return -1;
-                }
-
-                if (i < size)
-                {
-                    ch = *p++;
-                    ++i;
-                    if (ch == '\n') // empty line
-                    {
-                        resp->buf.inc_offset(i);
-                        if (resp->buf.size_remain() == 0)
-                            resp->buf.init();
-                        return resp->cgi.vPar.size();
-                    }
-                    else
-                    {
-                        print_err(resp, "<%s:%d> Error: \\n not found\n", __func__, __LINE__);
-                        return -1;
-                    }
-                }
-
-                return 0;
-            }
-            else if (ch == '\n') // empty line
-            {
-                if (header.name.size())
-                {
-                    print_err(resp, "<%s:%d> Error\n", __func__, __LINE__);
-                    return -1;
-                }
-
-                resp->buf.inc_offset(i);
-                if (resp->buf.size_remain() == 0)
-                    resp->buf.init();
-                return resp->cgi.vPar.size();
-            }
-            else if (ch == 0)
-            {
-                print_err(resp, "<%s:%d> Error: character = 0\n", __func__, __LINE__);
-                return -1;
-            }
-            else
-                header.name += ch;
-        }
-
-        if (i == size)
-            return 0;
-        if (lower_case)
-        {
-            for (unsigned int n = 0; n < header.name.size(); ++n)
-            {
-                header.name[n] = tolower(header.name[n]);
-            }
-        }
-
-        for ( ; i < size; ) // value
-        {
-            if (i > MAX_HEADER_LEN)
-            {
-                print_err(resp, "<%s:%d> Error: size of header > %d bytes\n", __func__, __LINE__, i);
-                return -1;
-            }
-
-            char ch = *(p++);
-            ++i;
-
-            if (ch == '\r')
-                continue;
-            else if (ch == '\n')
-            {
-                if ((header.name == "status") || (header.name == "Status"))
-                    sscanf(header.val.c_str(), "%d", &resp->resp_status);
-                resp->buf.inc_offset(i);
-                resp->cgi.vPar.push_back(header); // add header
-                size = resp->buf.size_remain();
-                if (resp->buf.size_remain() == 0)
-                    resp->buf.init();
-                i = 0;
-                break;
-            }
-            else if (ch == 0)
-            {
-                print_err(resp, "<%s:%d> Error: character = 0\n", __func__, __LINE__);
-                return -1;
-            }
-            else if (ch == ' ')
-            {
-                if (header.val.size())
-                    header.val += ch;
-            }
-            else
-                header.val += ch;
-        }
-
-        if (i == size)
-            return 0;
-    }
-
-    return 0;
-}
-//======================================================================
-void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
-{
-    int ret = cgi_parse_headers(c, resp, true);
-    if (ret < 0)
-    {
-        print_err(resp, "<%s:%d> Error cgi_parse_headers() = -1\n", __func__, __LINE__);
-        set_error_message(c, resp, RS502);
-        return;
-    }
-    else if (ret == 0)
-    {
-        //print_err(resp, "<%s:%d> cgi_parse_headers() = 0\n", __func__, __LINE__);
-        return;
-    }
-
-    set_frame_headers(resp);
-    char str_status[32];
-    snprintf(str_status, sizeof(str_status), "%d", resp->resp_status);
-    add_header(resp, 8, str_status);
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-
-    for (unsigned int i = 0; i < resp->cgi.vPar.size(); ++i)
-    {
-        Param header;
-        header = resp->cgi.vPar[i];
-        if (header.name == "status")
-            continue;
-        else if (header.name == "content-type")
-            add_header(resp, 31, header.val.c_str());
-        else if (header.name == "location")
-            add_header(resp, 46, header.val.c_str());
-        else
-        {
-            print_err(resp, "<%s:%d> [%s: %s]\n", __func__, __LINE__, header.name.c_str(), header.val.c_str());
-            add_header(resp, header.name.c_str(), header.val.c_str());
-        }
-    }
-
-    if (resp->resp_status == RS204)
-    {
-        add_header(resp, 28, "0");
-        set_frame_flags(&resp->headers, FLAG_END_STREAM);
-        resp->create_headers = true;
-        resp->cgi.end = true;
-        resp->buf.init();
-        return;
-    }
-
-    if (resp->buf.size_remain() == 0)
-        resp->buf.init();
-    resp->create_headers = true;
 }

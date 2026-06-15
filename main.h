@@ -119,11 +119,11 @@ struct http2
     char header[9];
     int header_len;
 
-    ByteArray body;
-    ByteArray goaway;
-    ByteArray ping;
-    ByteArray settings;
-    ByteArray frame_win_update;
+    BytesArray body;
+    BytesArray goaway;
+    BytesArray ping;
+    BytesArray settings;
+    BytesArray frame_win_update;
 
     bool try_again;
     struct
@@ -201,7 +201,7 @@ struct http1
     } con_status;
 
     Stream resp;
-    ByteArray hdrs;
+    BytesArray hdrs;
     CHUNK_MODE chunk_mode;
     bool connKeepAlive;
     bool try_again;
@@ -418,15 +418,18 @@ int send_message(Connect *c, const char *msg);
 int read_post_data(Connect *c);
 const char *http1_status_response(int st);
 //------------------------ http1_cgi.cpp -------------------------------
-int cgi_set_size_chunk(ByteArray *ba);
-//------------------------ http2_cgi.cpp -------------------------------
 void kill_chld(pid_t pid);
+const char *get_script_name(const char *name);
+const char *base_name(const char *path);
+int cgi_set_size_chunk(BytesArray *ba);
+int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case);
+//------------------------ http2_cgi.cpp -------------------------------
 int is_cgi(Stream *resp);
 //------------------------ http2_fcgi.cpp ------------------------------
-void fcgi_set_header(ByteArray* ba, unsigned char type);
+void fcgi_set_header(BytesArray* ba, unsigned char type);
 void fcgi_set_header(char *s, unsigned char type, int dataLen);
 int fcgi_create_connect(Connect *c, Stream *r);
-int cgi_parse_headers(Connect* c, Stream *resp, bool);
+int fcgi_create_params(Connect *c, Stream *r);
 //------------------------ scgi.cpp-------------------------------
 int scgi_create_connect(Connect *c, Stream *r);
 //-------------------------- config.cpp --------------------------------
@@ -434,7 +437,7 @@ int read_conf_file(const char *path_conf);
 int set_max_fd(int max_open_fd);
 void free_fcgi_list();
 //------------------------- index_dir.cpp ------------------------------
-int index_dir(Connect *c, const char *path, const char *uri, ByteArray *b);
+int index_dir(Connect *c, const char *path, const char *uri, BytesArray *b);
 //----------------------- percent_coding.cpp----------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, std::string& s_out);
@@ -449,7 +452,7 @@ int strlcmp_case(const char *s1, const char *s2, int len);
 int strcmp_case(const char *s1, const char *s2);
 int pow_(int x, int y);
 int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int size, int *len);
-int int_to_bytes(ByteArray& buf, int data, int pref_len, int mask);
+int int_to_bytes(BytesArray& buf, int data, int pref_len, int mask);
 
 HTTP_METHOD get_int_method(const char *s);
 const char *get_str_method(int i);
@@ -471,12 +474,14 @@ void hex_print_stderr(const char *s, int line, const void *p, int n);
 const char *http2_status_resonse(int st);
 //--------------------------- http2.cpp --------------------------------
 void set_frame_headers(Stream *r);
-void set_frame_flags(ByteArray *ba, int flags);
+void set_frame_flags(BytesArray *ba, int flags);
 void set_frame_data(Stream *resp, int len, int flag);
 int set_frame_data(Connect *con, Stream *r);
 void add_header(Stream *r, int ind);
 void add_header(Stream *r, int ind, const char *val);
 void add_header(Stream *resp, const char *name, const char *val);
+void add_cgi_header(Stream *resp, const char *name, const char *val);
+void add_cgi_headers(Stream *r);
 void set_frame_window_update(Connect *c, int len);
 void set_frame_window_update(Stream *r, int len);
 void set_frame_goaway(Connect *c, HTTP2_ERRORS error);
@@ -491,7 +496,7 @@ void print_err(Stream *r, const char *format, ...);
 void print_log(Connect *c, Stream *r);
 void print_log(Connect *c);
 //----------------------- huffman_code.cpp -----------------------------
-int huffman_encode(const char *s, ByteArray& out);
+int huffman_encode(const char *s, BytesArray& out);
 int huffman_decode(const char *s, int len, std::string& s_out);
 //----------------------- event_handler.cpp ----------------------------
 void push_wait_list(Connect *c);

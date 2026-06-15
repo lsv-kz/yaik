@@ -7,7 +7,7 @@
 
 extern const unsigned int array_reserve;
 //======================================================================
-class ByteArray
+class BytesArray
 {
     char int_buf[21];
     char *buf;
@@ -38,12 +38,12 @@ class ByteArray
         return int_buf + cnt;
     }
     //------------------------------------------------------------------
-    ByteArray(const ByteArray&);
-    ByteArray& operator=(const ByteArray&);
+    BytesArray(const BytesArray&);
+    BytesArray& operator=(const BytesArray&);
 
 public:
 
-    ByteArray()
+    BytesArray()
     {
         buf = NULL;
         buf_size = buf_len = 0;
@@ -51,7 +51,7 @@ public:
         err = 0;
     }
     //------------------------------------------------------------------
-    ~ByteArray()
+    ~BytesArray()
     {
         if (buf)
         {

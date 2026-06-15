@@ -576,7 +576,7 @@ int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int size, in
     return data;
 }
 //======================================================================
-int int_to_bytes(int data, int pref_len, ByteArray& buf)
+int int_to_bytes(int data, int pref_len, BytesArray& buf)
 {
     int ret = 0;
 
@@ -604,7 +604,7 @@ int int_to_bytes(int data, int pref_len, ByteArray& buf)
     return ret;
 }
 //======================================================================
-int int_to_bytes(ByteArray& buf, int data, int pref_len, int huff_coding_mask)
+int int_to_bytes(BytesArray& buf, int data, int pref_len, int huff_coding_mask)
 {
     int ret = 0;
 
