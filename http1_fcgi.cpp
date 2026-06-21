@@ -2,6 +2,69 @@
 
 using namespace std;
 //======================================================================
+void fcgi_set_header(BytesArray* ba, unsigned char type)
+{
+    int dataLen = ba->size() - 8;
+
+    ba->set_byte(FCGI_VERSION_1, 0);
+    ba->set_byte((unsigned char)type, 1);
+    ba->set_byte((unsigned char) ((1 >> 8) & 0xff), 2);
+    ba->set_byte((unsigned char) ((1) & 0xff), 3);
+    ba->set_byte((unsigned char) ((dataLen >> 8) & 0xff), 4);
+    ba->set_byte((unsigned char) ((dataLen) & 0xff), 5);
+    ba->set_byte(0, 6);
+    ba->set_byte(0, 7);
+}
+//======================================================================
+void fcgi_set_header(char *s, unsigned char type, int dataLen)
+{
+    s[0] = (unsigned char)FCGI_VERSION_1;
+    s[1] = (unsigned char)type;
+    s[2] = (unsigned char)((1 >> 8) & 0xff);
+    s[3] = (unsigned char)((1) & 0xff);
+    s[4] = (unsigned char)((dataLen >> 8) & 0xff);
+    s[5] = (unsigned char)((dataLen) & 0xff);
+    s[6] = 0;
+    s[7] = 0;
+}
+//======================================================================
+int fcgi_create_connect(Connect *c, Stream *resp)
+{
+    if ((resp->cgi_type != PHPFPM) && (resp->cgi_type != FASTCGI))
+    {
+        print_err(resp, "<%s:%d> ? req->scriptType=%d \n", __func__, __LINE__, resp->cgi_type);
+        return -1;
+    }
+
+    if (resp->cgi_type == PHPFPM)
+        resp->cgi.socket = &conf->PathPHP;
+
+    resp->cgi.fd = create_fcgi_socket(resp->cgi.socket->c_str());
+    if (resp->cgi.fd < 0)
+    {
+        print_err(resp, "<%s:%d> Error connect to fcgi\n", __func__, __LINE__);
+        return -1;
+    }
+
+    char s[16];
+    s[0] = FCGI_VERSION_1;
+    s[1] = FCGI_BEGIN_REQUEST;
+    s[2] = (unsigned char) ((1 >> 8) & 0xff);
+    s[3] = (unsigned char) ((1) & 0xff);
+    s[4] = (unsigned char) ((8 >> 8) & 0xff);
+    s[5] = (unsigned char) ((8) & 0xff);
+    s[6] = 0;
+    s[7] = 0;
+
+    s[8] = (unsigned char) ((FCGI_RESPONDER >> 8) & 0xff);
+    s[9] = (unsigned char) (FCGI_RESPONDER        & 0xff);
+    s[10] = (unsigned char) 0;
+    memset(s + 11, 0, 5);
+    resp->send_data.ncpy(s, 16);
+    resp->cgi_status = FASTCGI_BEGIN;
+    return 0;
+}
+//======================================================================
 void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
 {
     int revents = poll_fd[cgi_ind_poll].revents;
@@ -52,7 +115,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
         {
             if (c->h1->resp.send_data.size_remain() == 0)
             {
-                c->h1->resp.send_data.cpy("\0\0\0\0\0\0\0\0", 8);
+                c->h1->resp.send_data.ncpy("\0\0\0\0\0\0\0\0", 8);
                 fcgi_set_header(&c->h1->resp.send_data, FCGI_PARAMS);
             }
 
@@ -77,7 +140,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                     c->h1->resp.cgi_status = CGI_STDIN;
                     if ((c->h1->resp.post_content_len <= 0) && (c->h1->resp.post_data.size() == 0))
                     {
-                        c->h1->resp.post_data.cpy("\0\0\0\0\0\0\0\0", 8);
+                        c->h1->resp.post_data.ncpy("\0\0\0\0\0\0\0\0", 8);
                         fcgi_set_header(&c->h1->resp.post_data, FCGI_STDIN);
                     }
                 }
@@ -210,7 +273,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                     if (c->h1->chunk_mode == CHUNK)
                     {
                         char s[] = "0\r\n\r\n";
-                        c->h1->resp.send_data.cpy(s, 5);
+                        c->h1->resp.send_data.ncpy(s, 5);
                     }
 
                     break;
@@ -236,15 +299,15 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                 case FCGI_STDOUT:
                     if (c->h1->resp.create_headers == false)
                     {
-                        c->h1->resp.buf.cat(buf, ret);
+                        c->h1->resp.buf.ncat(buf, ret);
                         http1_get_cgi_headers(c);
                     }
                     else
                     {
                         if (c->h1->chunk_mode == CHUNK)
                         {
-                            c->h1->resp.send_data.cpy("01234567", 8);
-                            c->h1->resp.send_data.cat(buf, ret);
+                            c->h1->resp.send_data.ncpy("01234567", 8);
+                            c->h1->resp.send_data.ncat(buf, ret);
                             int ret = cgi_set_size_chunk(&c->h1->resp.send_data);
                             if (ret < 0)
                             {
@@ -256,7 +319,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
                         }
                         else
                         {
-                            c->h1->resp.send_data.cat(buf, ret);
+                            c->h1->resp.send_data.ncat(buf, ret);
                         }
                     }
                     break;

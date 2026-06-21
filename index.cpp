@@ -3,7 +3,7 @@
 
 using namespace std;
 //======================================================================
-int isimage(const char *name)
+static int isimage(const char *name)
 {
     const char *p;
 
@@ -21,7 +21,7 @@ int isimage(const char *name)
     return 0;
 }
 //======================================================================
-int isaudio(const char *name)
+static int isaudio(const char *name)
 {
     const char *p;
 
@@ -37,7 +37,7 @@ int isaudio(const char *name)
     return 0;
 }
 //======================================================================
-int isvideo(const char *name)
+static int isvideo(const char *name)
 {
     const char *p;
 
@@ -52,7 +52,7 @@ int isvideo(const char *name)
     return 0;
 }
 //======================================================================
-bool cmp(const string &a, const string &b)
+static bool cmp(const string &a, const string &b)
 {
     unsigned int n1, n2;
     bool i;
@@ -72,7 +72,7 @@ bool cmp(const string &a, const string &b)
     return i;
 }
 //======================================================================
-int create_index_html(Connect *c, vector<string>& list, int num_files, const char *dir_path, const char *uri, BytesArray *html)
+static int create_index_html(Connect *c, vector<string>& list, int num_files, const char *dir_path, const char *uri, BytesArray *html)
 {
     int n, i;
     struct stat st;
@@ -86,13 +86,13 @@ int create_index_html(Connect *c, vector<string>& list, int num_files, const cha
 
     memcpy(file_path, dir_path, dir_path_len);
     //------------------------------------------------------------------
-    html->cpy_str("<!DOCTYPE HTML>\r\n"
+    html->strcpy("<!DOCTYPE HTML>\r\n"
             "<html>\r\n"
             " <head>\r\n"
             "  <meta charset=\"UTF-8\">\r\n"
             "  <title>Index of ");
-    html->cat_str(uri);
-    html->cat_str("</title>\r\n"
+    html->strcat(uri);
+    html->strcat("</title>\r\n"
             "  <style>\r\n"
             "    body {\r\n"
             "      margin-left:100px;\r\n"
@@ -112,15 +112,15 @@ int create_index_html(Connect *c, vector<string>& list, int num_files, const cha
             " </head>\r\n"
             " <body id=\"top\">\r\n"
             "  <h3>Index of ");
-    html->cat_str(uri);
-    html->cat_str("</h3>\r\n"
+    html->strcat(uri);
+    html->strcat("</h3>\r\n"
             "  <table border=\"0\" width=\"100\%\">\r\n"
             "   <tr><td><h3>Directories</h3></td></tr>\r\n");
     //------------------------------------------------------------------
      if (!strcmp(uri, "/"))
-        html->cat_str("   <tr><td></td></tr>\r\n");
+        html->strcat("   <tr><td></td></tr>\r\n");
     else
-        html->cat_str("   <tr><td><a href=\"../\">Parent Directory/</a></td></tr>\r\n");
+        html->strcat("   <tr><td><a href=\"../\">Parent Directory/</a></td></tr>\r\n");
     //-------------------------- Directories ---------------------------
     for (i = 0; i < num_files; i++)
     {
@@ -136,14 +136,14 @@ int create_index_html(Connect *c, vector<string>& list, int num_files, const cha
             continue;
         }
 
-        html->cat_str("   <tr><td><a href=\"");
-        html->cat_str(buf);
-        html->cat_str("/\">");
-        html->cat_str(list[i].c_str());
-        html->cat_str("/</a></td></tr>\r\n");
+        html->strcat("   <tr><td><a href=\"");
+        html->strcat(buf);
+        html->strcat("/\">");
+        html->strcat(list[i].c_str());
+        html->strcat("/</a></td></tr>\r\n");
     }
     //------------------------------------------------------------------
-    html->cat_str("  </table>\r\n   <hr>\r\n  <table border=\"0\" width=\"100\%\">\r\n"
+    html->strcat("  </table>\r\n   <hr>\r\n  <table border=\"0\" width=\"100\%\">\r\n"
                 "   <tr><td><h3>Files</h3></td><td></td></tr>\r\n");
     //---------------------------- Files -------------------------------
     for (i = 0; i < num_files; i++)
@@ -164,57 +164,57 @@ int create_index_html(Connect *c, vector<string>& list, int num_files, const cha
 
         if (isimage(list[i].c_str()) && conf->ShowMediaFiles)
         {
-            html->cat_str("   <tr><td><a href=\"");
-            html->cat_str(buf);
-            html->cat_str("\"><img src=\"");
-            html->cat_str(buf);
-            html->cat_str("\" width=\"100\"></a>");
-            html->cat_str(list[i].c_str());
-            html->cat_str("</td><td align=\"right\">");
+            html->strcat("   <tr><td><a href=\"");
+            html->strcat(buf);
+            html->strcat("\"><img src=\"");
+            html->strcat(buf);
+            html->strcat("\" width=\"100\"></a>");
+            html->strcat(list[i].c_str());
+            html->strcat("</td><td align=\"right\">");
             html->cat_int(st.st_size);
-            html->cat_str(" bytes</td></tr>\r\n");
+            html->strcat(" bytes</td></tr>\r\n");
         }
         else if (isaudio(list[i].c_str()) && conf->ShowMediaFiles)
         {
-            html->cat_str("   <tr><td><audio preload=\"none\" controls src=\"");
-            html->cat_str(buf);
-            html->cat_str("\"></audio><a href=\"");
-            html->cat_str(buf);
-            html->cat_str("\">");
-            html->cat_str(list[i].c_str());
-            html->cat_str("</a></td><td align=\"right\">");
+            html->strcat("   <tr><td><audio preload=\"none\" controls src=\"");
+            html->strcat(buf);
+            html->strcat("\"></audio><a href=\"");
+            html->strcat(buf);
+            html->strcat("\">");
+            html->strcat(list[i].c_str());
+            html->strcat("</a></td><td align=\"right\">");
             html->cat_int(st.st_size);
-            html->cat_str(" bytes</td></tr>\r\n");
+            html->strcat(" bytes</td></tr>\r\n");
         }
         else if (isvideo(list[i].c_str()) && conf->ShowMediaFiles)
         {
-            html->cat_str("   <tr><td><video width=\"320\" preload=\"none\" controls src=\"");
-            //html->cat_str("   <tr><td><video preload=\"none\" controls src=\"");
-            html->cat_str(buf);
-            html->cat_str("\"></video><a href=\"");
-            html->cat_str(buf);
-            html->cat_str("\">");
-            html->cat_str(list[i].c_str());
-            html->cat_str("</a></td><td align=\"right\">");
+            html->strcat("   <tr><td><video width=\"320\" preload=\"none\" controls src=\"");
+            //html->strcat("   <tr><td><video preload=\"none\" controls src=\"");
+            html->strcat(buf);
+            html->strcat("\"></video><a href=\"");
+            html->strcat(buf);
+            html->strcat("\">");
+            html->strcat(list[i].c_str());
+            html->strcat("</a></td><td align=\"right\">");
             html->cat_int(st.st_size);
-            html->cat_str(" bytes</td></tr>\r\n");
+            html->strcat(" bytes</td></tr>\r\n");
         }
         else
         {
-            html->cat_str("   <tr><td><a href=\"");
-            html->cat_str(buf);
-            html->cat_str("\">");
-            html->cat_str(list[i].c_str());
-            html->cat_str("</a></td><td align=\"right\">");
+            html->strcat("   <tr><td><a href=\"");
+            html->strcat(buf);
+            html->strcat("\">");
+            html->strcat(list[i].c_str());
+            html->strcat("</a></td><td align=\"right\">");
             html->cat_int(st.st_size);
-            html->cat_str(" bytes</td></tr>\r\n");
+            html->strcat(" bytes</td></tr>\r\n");
         }
     }
     //------------------------------------------------------------------
-    html->cat_str("  </table>\r\n"
+    html->strcat("  </table>\r\n"
               "  <hr>\r\n  ");
-    html->cat_time();
-    html->cat_str("\r\n"
+    html->timecat();
+    html->strcat("\r\n"
               "  <a href=\"#top\" style=\"display:block;\r\n"
               "         position:fixed;\r\n"
               "         bottom:30px;\r\n"

@@ -289,7 +289,7 @@ int EventHandlerClass::cgi_stdout(Connect *c, Stream *resp, int fd)
     else if (ret > 0)
     {
         resp->cgi.timer = 0;
-        resp->buf.cat(buf, ret);
+        resp->buf.ncat(buf, ret);
     }
 
     return ret;
@@ -502,14 +502,14 @@ void EventHandlerClass::http2_get_cgi_headers(Connect* c, Stream *resp)
     set_frame_headers(resp);
     char str_status[32];
     snprintf(str_status, sizeof(str_status), "%d", resp->resp_status);
-    add_header(resp, 8, str_status);                      // :status
-    add_header(resp, 54, conf->ServerSoftware.c_str());   // server
-    add_header(resp, 33, get_time().c_str());             // date
+    add_header(resp->headers, 8, str_status);                      // :status
+    add_header(resp->headers, 54, conf->ServerSoftware.c_str());   // server
+    add_header(resp->headers, 33, get_time().c_str());             // date
     add_cgi_headers(resp);
 //hex_print_stderr(__func__, __LINE__, resp->headers.ptr(), resp->headers.size());
     if (resp->resp_status == RS204)
     {
-        add_header(resp, 28, "0");
+        add_header(resp->headers, 28, "0");
         set_frame_flags(&resp->headers, FLAG_END_STREAM);
         resp->create_headers = true;
         resp->cgi.end = true;

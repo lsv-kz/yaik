@@ -64,7 +64,7 @@ int cgi_set_size_chunk(BytesArray *ba)
         return -1;
 
     ba->inc_offset(i);
-    ba->cat("\r\n", 2);
+    ba->ncat("\r\n", 2);
 
     return 0;
 }
@@ -90,14 +90,14 @@ int EventHandlerClass::cgi_stdout(Connect *c, int fd)
         if (c->h1->resp.create_headers == false)
         {
             buf[ret] = 0;
-            c->h1->resp.buf.cat(buf, ret);
+            c->h1->resp.buf.ncat(buf, ret);
         }
         else
         {
             if (c->h1->chunk_mode == CHUNK)
             {
-                c->h1->resp.send_data.cpy("01234567", 8);
-                c->h1->resp.send_data.cat(buf, ret);
+                c->h1->resp.send_data.ncpy("01234567", 8);
+                c->h1->resp.send_data.ncat(buf, ret);
                 int ret = cgi_set_size_chunk(&c->h1->resp.send_data);
                 if (ret < 0)
                 {
@@ -106,7 +106,7 @@ int EventHandlerClass::cgi_stdout(Connect *c, int fd)
                 }
             }
             else
-                c->h1->resp.send_data.cat(buf, ret);
+                c->h1->resp.send_data.ncat(buf, ret);
         }
     }
 
@@ -233,7 +233,7 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
                     if (con->h1->chunk_mode == CHUNK)
                     {
                         char s[] = "0\r\n\r\n";
-                        con->h1->resp.send_data.cat_str(s);
+                        con->h1->resp.send_data.strcat(s);
                     }
 
                     if (con->h1->resp.send_data.size() == 0)
@@ -292,7 +292,7 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
             if (con->h1->chunk_mode == CHUNK)
             {
                 char s[] = "0\r\n\r\n";
-                con->h1->resp.send_data.cpy(s, 5);
+                con->h1->resp.send_data.ncpy(s, 5);
             }
             else
             {
@@ -341,8 +341,8 @@ void EventHandlerClass::http1_get_cgi_headers(Connect *c)
     {
         if (c->h1->chunk_mode == CHUNK)
         {
-            c->h1->resp.send_data.cpy("01234567", 8);
-            c->h1->resp.send_data.cat(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
+            c->h1->resp.send_data.ncpy("01234567", 8);
+            c->h1->resp.send_data.ncat(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
             int ret = cgi_set_size_chunk(&c->h1->resp.send_data);
             if (ret < 0)
             {
@@ -353,7 +353,7 @@ void EventHandlerClass::http1_get_cgi_headers(Connect *c)
             }
         }
         else
-            c->h1->resp.send_data.cpy(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
+            c->h1->resp.send_data.ncpy(c->h1->resp.buf.ptr_remain(), c->h1->resp.buf.size_remain());
     }
 }
 //======================================================================
@@ -362,7 +362,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
     const int MAX_HEADER_LEN = 512;
     const char *p = resp->buf.ptr_remain();
     unsigned int size = resp->buf.size_remain();
-//fprintf(stderr, "<%s:%d> ----------resp->buf-----------\n%s\n", __func__, __LINE__, array_ptr_remain(&resp->buf));
+
     char name[512];
     char val[512];
     name[0] = 0;
@@ -403,7 +403,6 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                         resp->buf.inc_offset(i);
                         if (resp->buf.size_remain() == 0)
                             resp->buf.init();
-//fprintf(stderr, "<%s:%d>*** empty line ***\n", __func__, __LINE__);
                         return 1;
                     }
                     else
@@ -422,7 +421,7 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                     print_err(c, "<%s:%d> Error\n", __func__, __LINE__);
                     return -1;
                 }
-//fprintf(stderr, "<%s:%d>*** empty line ***\n", __func__, __LINE__);
+
                 resp->buf.inc_offset(i);
                 if (resp->buf.size_remain() == 0)
                     resp->buf.init();
@@ -481,15 +480,15 @@ int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case)
                     // add header
                     if (c->Protocol == P_HTTP1)
                     {
-                        c->h1->hdrs.cat(name, name_len);
-                        c->h1->hdrs.cat(": ", 2);
-                        c->h1->hdrs.cat(val, val_len);
-                        c->h1->hdrs.cat("\r\n", 2);
+                        c->h1->hdrs.ncat(name, name_len);
+                        c->h1->hdrs.ncat(": ", 2);
+                        c->h1->hdrs.ncat(val, val_len);
+                        c->h1->hdrs.ncat("\r\n", 2);
                     }
                     else if (c->Protocol == P_HTTP2)
                     {
                         //print_err(resp, "<%s:%d> [%s: %s]\n", __func__, __LINE__, name, val);
-                        add_cgi_header(resp, name, val);
+                        add_header(resp->cgi_headers, name, val);
                     }
                 }
                 

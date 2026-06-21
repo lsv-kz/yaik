@@ -150,7 +150,7 @@ struct http2
     Stream *add(unsigned long, unsigned long);
     void del_from_list(Stream *r);
     int close_stream(int id);
-    int set_window_size(unsigned long num_conn, int id, long n);
+    int set_window_size(int id, long n);
     Stream *get(int id);
     Stream *get();
     int size();
@@ -307,7 +307,7 @@ public:
 //======================================================================
 class EventHandlerClass
 {
-    std::mutex mtx_thr, mtx_cgi;
+    std::mutex mtx_thr;
     std::condition_variable cond_thr;
 
     int num_poll, cgi_num_work;
@@ -351,7 +351,6 @@ class EventHandlerClass
 
     void http1_set_poll(Connect *c);
     void http2_set_poll(Connect *c);
-    int http1_poll(Connect *c, int);
     int http2_poll(Connect *c, int);
 
     void cgi_worker(Connect *c, Stream *r, int i);
@@ -423,18 +422,18 @@ const char *get_script_name(const char *name);
 const char *base_name(const char *path);
 int cgi_set_size_chunk(BytesArray *ba);
 int cgi_parse_headers(Connect* c, Stream *resp, bool lower_case);
-//------------------------ http2_cgi.cpp -------------------------------
-int is_cgi(Stream *resp);
-//------------------------ http2_fcgi.cpp ------------------------------
+//------------------------ http1_fcgi.cpp ------------------------------
 void fcgi_set_header(BytesArray* ba, unsigned char type);
 void fcgi_set_header(char *s, unsigned char type, int dataLen);
 int fcgi_create_connect(Connect *c, Stream *r);
+//------------------------ http2_cgi.cpp -------------------------------
+int is_cgi(Stream *resp);
+//------------------------ http2_fcgi.cpp ------------------------------
 int fcgi_create_params(Connect *c, Stream *r);
 //------------------------ scgi.cpp-------------------------------
 int scgi_create_connect(Connect *c, Stream *r);
 //-------------------------- config.cpp --------------------------------
 int read_conf_file(const char *path_conf);
-int set_max_fd(int max_open_fd);
 void free_fcgi_list();
 //------------------------- index_dir.cpp ------------------------------
 int index_dir(Connect *c, const char *path, const char *uri, BytesArray *b);
@@ -450,7 +449,7 @@ std::string log_time(time_t t);
 const char *strstr_case(const char * s1, const char *s2);
 int strlcmp_case(const char *s1, const char *s2, int len);
 int strcmp_case(const char *s1, const char *s2);
-int pow_(int x, int y);
+
 int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int size, int *len);
 int int_to_bytes(BytesArray& buf, int data, int pref_len, int mask);
 
@@ -461,32 +460,24 @@ const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_status(CGI_STATUS s);
 const char *get_http2_error(int err);
 const char *get_str_sourcedata(SOURCE_DATA n);
+const char *content_type(const char *s);
 
 int clean_path(char *path, int len);
-const char *content_type(const char *s);
 long long file_size(const char *s);
 SOURCE_DATA get_content_type(const char *path);
 int parse_range(const char *s, long long file_size, long long *offset, long long *content_length);
-void resp_204(Stream *resp);
 void set_error_message(Connect *c, Stream *resp, int err);
-void set_error(Stream *resp, int err);
 void hex_print_stderr(const char *s, int line, const void *p, int n);
 const char *http2_status_resonse(int st);
 //--------------------------- http2.cpp --------------------------------
 void set_frame_headers(Stream *r);
 void set_frame_flags(BytesArray *ba, int flags);
 void set_frame_data(Stream *resp, int len, int flag);
-int set_frame_data(Connect *con, Stream *r);
 void add_header(Stream *r, int ind);
-void add_header(Stream *r, int ind, const char *val);
-void add_header(Stream *resp, const char *name, const char *val);
-void add_cgi_header(Stream *resp, const char *name, const char *val);
+void add_header(BytesArray& ba, int ind, const char *val);
+void add_header(BytesArray& ba, const char *name, const char *val);
 void add_cgi_headers(Stream *r);
-void set_frame_window_update(Connect *c, int len);
-void set_frame_window_update(Stream *r, int len);
-void set_frame_goaway(Connect *c, HTTP2_ERRORS error);
 void set_rst_stream(Connect *c, Stream *resp, HTTP2_ERRORS error);
-int set_response(Connect *c, Stream *r);
 //--------------------------- log.cpp ----------------------------------
 void create_logfiles(const std::string &);
 void close_logs();

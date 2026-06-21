@@ -4,7 +4,7 @@ using namespace std;
 //======================================================================
 static int read_request_headers(Connect *c);
 //======================================================================
-int set_response(Connect *c)
+static int set_response(Connect *c)
 {
     if ((c->h1->resp.httpMethod != M_GET) &&
         (c->h1->resp.httpMethod != M_HEAD) &&
@@ -109,7 +109,7 @@ int set_response(Connect *c)
     }
     //------------------------------------------------------------------
     string path;
-    path.reserve(c->h1->resp.vhost->DocumentRoot.size() + c->h1->resp.clean_decode_path_size + 257);
+    path.reserve(c->h1->resp.vhost->DocumentRoot.size() + c->h1->resp.clean_decode_path_size + 256);
     path = c->h1->resp.vhost->DocumentRoot;
     path += c->h1->resp.clean_decode_path;
     struct stat st;
@@ -145,9 +145,9 @@ int set_response(Connect *c)
         {
             c->h1->resp.resp_status = RS301;
             c->h1->resp.path.insert(path_len, "/");
-            c->h1->hdrs.cpy_str("Location: ");
-            c->h1->hdrs.cat(c->h1->resp.path.c_str(), c->h1->resp.path.size());
-            c->h1->hdrs.cat("\r\n", 2);
+            c->h1->hdrs.strcpy("Location: ");
+            c->h1->hdrs.ncat(c->h1->resp.path.c_str(), c->h1->resp.path.size());
+            c->h1->hdrs.ncat("\r\n", 2);
             return send_message(c, "301 Moved Permanently");
         }
 
@@ -696,7 +696,7 @@ static int parse_header(Connect *c, const char *s)
     return 0;
 }
 //======================================================================
-int read_request_headers(Connect *c)
+static int read_request_headers(Connect *c)
 {
     while (true)
     {
@@ -766,24 +766,24 @@ int create_response_headers(Connect *c)
         return -1;
     }
 
-    c->h1->resp.headers.cpy_str("HTTP/1.1 ");
-    c->h1->resp.headers.cat_str(http1_status_response(c->h1->resp.resp_status));
-    c->h1->resp.headers.cat_str("\r\n");
+    c->h1->resp.headers.strcpy("HTTP/1.1 ");
+    c->h1->resp.headers.strcat(http1_status_response(c->h1->resp.resp_status));
+    c->h1->resp.headers.strcat("\r\n");
 
-    c->h1->resp.headers.cat_str("Date: ");
-    c->h1->resp.headers.cat_time();
-    c->h1->resp.headers.cat_str("\r\n");
+    c->h1->resp.headers.strcat("Date: ");
+    c->h1->resp.headers.timecat();
+    c->h1->resp.headers.strcat("\r\n");
 
     if (conf->ServerSoftware.size())
     {
-        c->h1->resp.headers.cat_str("Server: ");
-        c->h1->resp.headers.cat_str(conf->ServerSoftware.c_str());
-        c->h1->resp.headers.cat_str("\r\n");
+        c->h1->resp.headers.strcat("Server: ");
+        c->h1->resp.headers.strcat(conf->ServerSoftware.c_str());
+        c->h1->resp.headers.strcat("\r\n");
     }
 
     if (c->h1->resp.resp_status == RS204)
     {
-        c->h1->resp.headers.cat_str("Content-Length: 0\r\n");
+        c->h1->resp.headers.strcat("Content-Length: 0\r\n");
     }
     else
     {
@@ -793,22 +793,22 @@ int create_response_headers(Connect *c)
             {
                 if ((c->h1->resp.httpMethod == M_GET) || (c->h1->resp.httpMethod == M_POST))
                 {
-                    c->h1->resp.headers.cat_str("Transfer-Encoding: chunked\r\n");
+                    c->h1->resp.headers.strcat("Transfer-Encoding: chunked\r\n");
                 }
             }
             else
             {
                 if (c->h1->resp.resp_content_type)
                 {
-                    c->h1->resp.headers.cat_str("Content-Type: ");
-                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("Content-Type: ");
+                    c->h1->resp.headers.strcat(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.strcat("\r\n");
                 }
                 if (c->h1->resp.resp_content_len >= 0)
                 {
-                    c->h1->resp.headers.cat_str("Content-Length: ");
+                    c->h1->resp.headers.strcat("Content-Length: ");
                     c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("\r\n");
                 }
             }
         }
@@ -818,78 +818,78 @@ int create_response_headers(Connect *c)
             {
                 if (c->h1->resp.resp_content_type)
                 {
-                    c->h1->resp.headers.cat_str("Content-Type: ");
-                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("Content-Type: ");
+                    c->h1->resp.headers.strcat(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.strcat("\r\n");
                 }
 
-                c->h1->resp.headers.cat_str("Content-Length: ");
+                c->h1->resp.headers.strcat("Content-Length: ");
                 c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
-                c->h1->resp.headers.cat_str("\r\n");
+                c->h1->resp.headers.strcat("\r\n");
 
-                c->h1->resp.headers.cat_str("Content-Range: bytes ");
+                c->h1->resp.headers.strcat("Content-Range: bytes ");
                 c->h1->resp.headers.cat_int(c->h1->resp.offset);
-                c->h1->resp.headers.cat_str("-");
+                c->h1->resp.headers.strcat("-");
                 c->h1->resp.headers.cat_int(c->h1->resp.offset + c->h1->resp.resp_content_len - 1);
-                c->h1->resp.headers.cat_str("/");
+                c->h1->resp.headers.strcat("/");
                 c->h1->resp.headers.cat_int(c->h1->resp.file_size);
-                c->h1->resp.headers.cat_str("\r\n");
+                c->h1->resp.headers.strcat("\r\n");
 
-                c->h1->resp.headers.cat_str("Accept-Ranges: bytes\r\n");
+                c->h1->resp.headers.strcat("Accept-Ranges: bytes\r\n");
             }
             else if (c->h1->resp.resp_status == RS200)
             {
                 if (c->h1->resp.resp_content_type)
                 {
-                    c->h1->resp.headers.cat_str("Content-Type: ");
-                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("Content-Type: ");
+                    c->h1->resp.headers.strcat(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.strcat("\r\n");
                 }
 
                 if (c->h1->resp.resp_content_len >= 0)
                 {
-                    c->h1->resp.headers.cat_str("Content-Length: ");
+                    c->h1->resp.headers.strcat("Content-Length: ");
                     c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("\r\n");
 
-                    c->h1->resp.headers.cat_str("Accept-Ranges: bytes\r\n");
+                    c->h1->resp.headers.strcat("Accept-Ranges: bytes\r\n");
                 }
             }
             else if (c->h1->resp.resp_status == RS416)
             {
                 if (c->h1->resp.resp_content_type)
                 {
-                    c->h1->resp.headers.cat_str("Content-Type: ");
-                    c->h1->resp.headers.cat_str(c->h1->resp.resp_content_type);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("Content-Type: ");
+                    c->h1->resp.headers.strcat(c->h1->resp.resp_content_type);
+                    c->h1->resp.headers.strcat("\r\n");
                 }
 
                 if (c->h1->resp.resp_content_len)
                 {
-                    c->h1->resp.headers.cat_str("Content-Length: ");
+                    c->h1->resp.headers.strcat("Content-Length: ");
                     c->h1->resp.headers.cat_int(c->h1->resp.resp_content_len);
-                    c->h1->resp.headers.cat_str("\r\n");
+                    c->h1->resp.headers.strcat("\r\n");
                 }
 
-                c->h1->resp.headers.cat_str("Content-Range: bytes */");
+                c->h1->resp.headers.strcat("Content-Range: bytes */");
                 c->h1->resp.headers.cat_int(c->h1->resp.file_size);
-                c->h1->resp.headers.cat_str("\r\n");
+                c->h1->resp.headers.strcat("\r\n");
             }
         }
     }
 
     if (c->h1->connKeepAlive == false)
-        c->h1->resp.headers.cat_str("Connection: close\r\n");
+        c->h1->resp.headers.strcat("Connection: close\r\n");
     else
-        c->h1->resp.headers.cat_str("Connection: keep-alive\r\n");
+        c->h1->resp.headers.strcat("Connection: keep-alive\r\n");
 
     if (c->h1->hdrs.size())
     {
-        c->h1->resp.headers.cat(c->h1->hdrs.ptr(), c->h1->hdrs.size());
+        c->h1->resp.headers.ncat(c->h1->hdrs.ptr(), c->h1->hdrs.size());
         c->h1->hdrs.init();
     }
 
-    c->h1->resp.headers.cat_str("\r\n");
+    c->h1->resp.headers.strcat("\r\n");
 
     if (c->h1->resp.headers.error())
     {
@@ -917,26 +917,26 @@ int send_message(Connect *c, const char *msg)
     else
     {
         const char *title = http1_status_response(c->h1->resp.resp_status);
-        c->h1->resp.send_data.cpy_str("<html>\r\n"
+        c->h1->resp.send_data.strcpy("<html>\r\n"
                 "<head>\r\n"
                 "<title>");
-        c->h1->resp.send_data.cat_str(title);
-        c->h1->resp.send_data.cat_str("</title>\r\n"
+        c->h1->resp.send_data.strcat(title);
+        c->h1->resp.send_data.strcat("</title>\r\n"
                 "<meta charset=\"utf-8\">\r\n"
                 "</head>\r\n"
                 "<body>\r\n"
                 "<h3>");
-        c->h1->resp.send_data.cat_str(title);
-        c->h1->resp.send_data.cat_str("</h3>\r\n");
+        c->h1->resp.send_data.strcat(title);
+        c->h1->resp.send_data.strcat("</h3>\r\n");
         if (msg)
         {
-            c->h1->resp.send_data.cat_str("<p>");
-            c->h1->resp.send_data.cat_str(msg);
-            c->h1->resp.send_data.cat_str("</p>\r\n");
+            c->h1->resp.send_data.strcat("<p>");
+            c->h1->resp.send_data.strcat(msg);
+            c->h1->resp.send_data.strcat("</p>\r\n");
         }
-        c->h1->resp.send_data.cat_str("<hr>\r\n");
-        c->h1->resp.send_data.cat_time();
-        c->h1->resp.send_data.cat_str("\r\n"
+        c->h1->resp.send_data.strcat("<hr>\r\n");
+        c->h1->resp.send_data.timecat();
+        c->h1->resp.send_data.strcat("\r\n"
                 "</body>\r\n"
                 "</html>");
 
@@ -974,17 +974,17 @@ int read_post_data(Connect *c)
     {
         char s[8];
         fcgi_set_header(s, FCGI_STDIN, ret);
-        c->h1->resp.post_data.cat(s, 8);
-        c->h1->resp.post_data.cat(buf, ret);
+        c->h1->resp.post_data.ncat(s, 8);
+        c->h1->resp.post_data.ncat(buf, ret);
         if (c->h1->resp.post_content_len <= 0)
         {
             fcgi_set_header(s, FCGI_STDIN, 0);
-            c->h1->resp.post_data.cat(s, 8);
+            c->h1->resp.post_data.ncat(s, 8);
         }
     }
     else
     {
-        c->h1->resp.post_data.cat(buf, ret);
+        c->h1->resp.post_data.ncat(buf, ret);
     }
 
     return ret;

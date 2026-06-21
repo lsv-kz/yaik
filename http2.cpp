@@ -13,9 +13,9 @@ void set_frame_headers(Stream *resp)
     s[6] = id>>=8;
     s[5] = (id>>8) & 0x7f;
 
-    resp->headers.cpy(s, 9);
+    resp->headers.ncpy(s, 9);
     if (resp->numReq == 1)
-        resp->headers.cat(0x20);
+        resp->headers.bytecat(0x20);
 }
 //======================================================================
 void set_frame_flags(BytesArray *ba, int flags)
@@ -26,19 +26,13 @@ void set_frame_flags(BytesArray *ba, int flags)
 //======================================================================
 void add_header(Stream *resp, int ind)
 {
-    if ((ind >= 8) && (ind <= 14))
-        resp->resp_status = atoi(static_tab[ind][1]);
-    resp->headers.cat(ind | 0x80);
-    int len = resp->headers.size() - 9;
-    resp->headers.set_byte(len, 2);
-    resp->headers.set_byte((len>>=8), 1);
-    resp->headers.set_byte((len>>8), 0);
+    resp->headers.bytecat(ind | 0x80);
 }
 //======================================================================
-void add_header(Stream *resp, int ind, int mask, const char *val, bool huffman)
+void add_header(BytesArray& ba, int ind, const char *val)
 {
-    if ((ind >= 8) && (ind <= 14))
-        resp->resp_status = atoi(val);
+    int mask = hpack_mask;
+    bool huffman = huff_coding;
     int len = (int)strlen(val);
     int prefix_len;
     switch (mask)
@@ -57,36 +51,27 @@ void add_header(Stream *resp, int ind, int mask, const char *val, bool huffman)
             mask = 0x40;
     }
 
-    int_to_bytes(resp->headers, ind, prefix_len, mask);
+    int_to_bytes(ba, ind, prefix_len, mask);
 
     if (huffman)
     {
         BytesArray buf;
         buf.reserve(len);
         huffman_encode(val, buf);
-        int_to_bytes(resp->headers, buf.size(), 7, 0x80);
-        resp->headers.cat(buf.ptr(), buf.size());
+        int_to_bytes(ba, buf.size(), 7, 0x80);
+        ba.ncat(buf.ptr(), buf.size());
     }
     else
     {
-        int_to_bytes(resp->headers, len, 7, 0);
-        resp->headers.cat(val, len);
+        int_to_bytes(ba, len, 7, 0);
+        ba.ncat(val, len);
     }
-
-    len = resp->headers.size() - 9;
-    resp->headers.set_byte(len, 2);
-    resp->headers.set_byte((len>>=8), 1);
-    resp->headers.set_byte((len>>8), 0);
 }
 //======================================================================
-void add_header(Stream *resp, int ind, const char *val)
+void add_header(BytesArray& ba, const char *name, const char *val)
 {
-    add_header(resp, ind, hpack_mask, val, huff_coding);
-}
-//======================================================================
-void add_header(Stream *resp, BytesArray& ba, const char *name, const char *val, bool huffman)
-{
-    ba.cat("\x00", 1);
+    bool huffman = huff_coding;
+    ba.ncat("\x00", 1);
     int len = (int)strlen(name);
     if (huffman)
     {
@@ -94,12 +79,12 @@ void add_header(Stream *resp, BytesArray& ba, const char *name, const char *val,
         buf.reserve(len);
         huffman_encode(name, buf);
         int_to_bytes(ba, buf.size(), 7, 0x80);
-        ba.cat(buf.ptr(), buf.size());
+        ba.ncat(buf.ptr(), buf.size());
     }
     else
     {
         int_to_bytes(ba, len, 7, 0);
-        ba.cat(name, len);
+        ba.ncat(name, len);
     }
 
     len = (int)strlen(val);
@@ -109,39 +94,21 @@ void add_header(Stream *resp, BytesArray& ba, const char *name, const char *val,
         buf.reserve(len);
         huffman_encode(val, buf);
         int_to_bytes(ba, buf.size(), 7, 0x80);
-        ba.cat(buf.ptr(), buf.size());
+        ba.ncat(buf.ptr(), buf.size());
     }
     else
     {
         int_to_bytes(ba, len, 7, 0);
-        ba.cat(val, len);
+        ba.ncat(val, len);
     }
-}
-//======================================================================
-void add_header(Stream *resp, const char *name, const char *val)
-{
-    add_header(resp, resp->headers, name, val, huff_coding);
-    int len = resp->headers.size() - 9;
-    resp->headers.set_byte(len, 2);
-    resp->headers.set_byte(len>>=8, 1);
-    resp->headers.set_byte(len>>8, 0);
-}
-//======================================================================
-void add_cgi_header(Stream *resp, const char *name, const char *val)
-{
-    add_header(resp, resp->cgi_headers, name, val, huff_coding);
 }
 //======================================================================
 void add_cgi_headers(Stream *resp)
 {
-    resp->headers.cat(resp->cgi_headers.ptr(), resp->cgi_headers.size());
-    int len = resp->headers.size() - 9;
-    resp->headers.set_byte(len, 2);
-    resp->headers.set_byte((len>>=8), 1);
-    resp->headers.set_byte((len>>8), 0);
+    resp->headers.ncat(resp->cgi_headers.ptr(), resp->cgi_headers.size());
 }
 //======================================================================
-void set_frame_window_update(Stream *resp, int len)// post data
+static void set_frame_window_update(Stream *resp, int len)// post data
 {
     int id = resp->id;
     char s[] = "\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
@@ -156,10 +123,10 @@ void set_frame_window_update(Stream *resp, int len)// post data
     s[10] = len>>=8;
     s[9] = (len>>8) & 0x7f;
 
-    resp->frame_win_update.cpy(s, 13);
+    resp->frame_win_update.ncpy(s, 13);
 }
 //======================================================================
-void set_frame_window_update(Connect *c, int len)// post data
+static void set_frame_window_update(Connect *c, int len)// post data
 {
     char s[] = "\x00\x00\x04\x08\x00\x00\x00\x00\x00"  // 0-8
                "\x00\x00\x00\x00";                     // 9-12
@@ -168,10 +135,10 @@ void set_frame_window_update(Connect *c, int len)// post data
     s[10] = len>>=8;
     s[9] = (len>>8) & 0x7f;
 
-    c->h2->frame_win_update.cpy(s, 13);
+    c->h2->frame_win_update.ncpy(s, 13);
 }
 //======================================================================
-void set_frame_goaway(Connect *c, HTTP2_ERRORS error)
+static void set_frame_goaway(Connect *c, HTTP2_ERRORS error)
 {
     char s[] = "\x0\x0\x8\x7\x0\x0\x0\x0\x0"
                "\x0\x0\x0\x0\x0\x0\x0\x0";
@@ -180,7 +147,7 @@ void set_frame_goaway(Connect *c, HTTP2_ERRORS error)
     s[15] = error>>8;
     s[16] = error;
 
-    c->h2->goaway.cpy(s, 17);
+    c->h2->goaway.ncpy(s, 17);
 }
 //======================================================================
 void set_rst_stream(Connect *c, Stream *resp, HTTP2_ERRORS error)
@@ -199,7 +166,7 @@ void set_rst_stream(Connect *c, Stream *resp, HTTP2_ERRORS error)
     s[11] = error>>8;
     s[12] = error;
     
-    resp->rst_stream.cpy(s, 13);
+    resp->rst_stream.ncpy(s, 13);
 }
 //======================================================================
 void set_frame_data(Stream *resp, int len, int flag)
@@ -214,10 +181,10 @@ void set_frame_data(Stream *resp, int len, int flag)
     s[7] = id>>=8;
     s[6] = id>>=8;
     s[5] = (id>>8) & 0x7f;
-    resp->send_data.cpy(s, 9);
+    resp->send_data.ncpy(s, 9);
 }
 //======================================================================
-int set_frame_data(Connect *c, Stream *resp)
+static int set_frame_data(Connect *c, Stream *resp)
 {
     resp->send_data.init();
     long data_len = 0;
@@ -250,7 +217,7 @@ int set_frame_data(Connect *c, Stream *resp)
                 len = min_window_size;
 
             set_frame_data(resp, len, 0);
-            resp->send_data.cat(resp->buf.ptr_remain(), len);
+            resp->send_data.ncat(resp->buf.ptr_remain(), len);
             resp->buf.inc_offset(len);
             if (resp->buf.size_remain() == 0)
                 resp->buf.init();
@@ -299,7 +266,7 @@ int set_frame_data(Connect *c, Stream *resp)
             int flag = (resp->resp_content_len > 0) ? 0 : FLAG_END_STREAM;
             set_frame_data(resp, data_len, flag);
             if (data_len > 0)
-                resp->send_data.cat(buf, data_len);
+                resp->send_data.ncat(buf, data_len);
             if (resp->resp_content_len == 0)
             {
                 close(resp->fd);
@@ -325,7 +292,7 @@ int set_frame_data(Connect *c, Stream *resp)
             resp->resp_content_len -= data_len;
             int flag = (resp->resp_content_len > 0) ? 0 : FLAG_END_STREAM;
             set_frame_data(resp, data_len, flag);
-            resp->send_data.cat(resp->buf.ptr_remain(), data_len);
+            resp->send_data.ncat(resp->buf.ptr_remain(), data_len);
             resp->buf.inc_offset(data_len);
         }
     }
@@ -333,7 +300,7 @@ int set_frame_data(Connect *c, Stream *resp)
     return 1;
 }
 //======================================================================
-int set_response(Connect *c, Stream *resp)
+static int set_response(Connect *c, Stream *resp)
 {
     if (resp->host.size() == 0)
     {
@@ -496,26 +463,27 @@ int set_response(Connect *c, Stream *resp)
         //----------- frame headers ----------------
         set_frame_headers(resp);
         if (resp->resp_status == RS206)
-            add_header(resp, 10);                                     // "206 Partial Content"
+            add_header(resp, 10);                                       // "206 Partial Content"
         else
-            add_header(resp, 8);                                      // "200 OK"
-        add_header(resp, 54, conf->ServerSoftware.c_str());           // "server"
-        add_header(resp, 33, get_time().c_str());                     // "date"
+            add_header(resp, 8);                                        // "200 OK"
+        add_header(resp->headers, 54, conf->ServerSoftware.c_str());    // "server"
+        add_header(resp->headers, 33, get_time().c_str());              // "date"
 
         resp->resp_content_type = content_type(resp->path.c_str());
         if (resp->resp_content_type)
-            add_header(resp, 31, resp->resp_content_type);            // "content-type"
+            add_header(resp->headers, 31, resp->resp_content_type);     // "content-type"
 
         char s[128];
         snprintf(s, sizeof(s), "%lld", resp->resp_content_len);
-        add_header(resp, 28, s);                                      // "content-length"
-        add_header(resp, 18, "bytes");                                // "accept-ranges"
-        add_header(resp, 24, "no-cache, no-store, must-revalidate");  // "cache-control"
+        add_header(resp->headers, 28, s);                               // "content-length"
+        add_header(resp->headers, 18, "bytes");                         // "accept-ranges"
+        add_header(resp->headers, 24, "no-cache, no-store, must-revalidate");// "cache-control"
 
         if ((resp->file_size == 0) || (resp->httpMethod == M_HEAD))
         {
             char flag = resp->headers.get_byte(4);
             resp->headers.set_byte(flag | FLAG_END_STREAM, 4);
+            resp->create_headers = true;
             return 0;
         }
 
@@ -524,7 +492,7 @@ int set_response(Connect *c, Stream *resp)
             char s[128];
             snprintf(s, sizeof(s), "bytes %lld-%lld/%lld", resp->offset, resp->offset + resp->resp_content_len - 1, resp->file_size);
             resp->file_size = resp->resp_content_len;
-            add_header(resp, 30, s);                                  // "content-range"
+            add_header(resp->headers, 30, s);                           // "content-range"
         }
 
         resp->create_headers = true;
@@ -550,22 +518,22 @@ int set_response(Connect *c, Stream *resp)
         {
             resp->path.insert(path_len, "/");
             set_frame_headers(resp);
-            add_header(resp, 8, "301");                               // "301 Moved Permanently"
-            add_header(resp, 54, conf->ServerSoftware.c_str());       // "server"
-            add_header(resp, 33, get_time().c_str());                 // "date"
-            add_header(resp, 46, resp->path.c_str());                 // "location"
-            add_header(resp, 31, "text/plain");                       // "content-type"
+            add_header(resp->headers, 8, "301");                        // "301 Moved Permanently"
+            add_header(resp->headers, 54, conf->ServerSoftware.c_str());// "server"
+            add_header(resp->headers, 33, get_time().c_str());          // "date"
+            add_header(resp->headers, 46, resp->path.c_str());          // "location"
+            add_header(resp->headers, 31, "text/plain");                // "content-type"
             resp->create_headers = true;
 
             const char *msg = "301 Moved Permanently\n";
             int len = strlen(msg);
             char s[32];
             snprintf(s, sizeof(s), "%d", (int)(len + resp->path.size()));
-            add_header(resp, 28, s);                                  // "content-length"
+            add_header(resp->headers, 28, s);                           // "content-length"
             resp->send_data.reserve(9 + len + resp->path.size());
             set_frame_data(resp, len + resp->path.size(), FLAG_END_STREAM);
-            resp->send_data.cat(msg, len);
-            resp->send_data.cat(resp->path.c_str(), resp->path.size());
+            resp->send_data.ncat(msg, len);
+            resp->send_data.ncat(resp->path.c_str(), resp->path.size());
             return 0;
         }
 
@@ -576,16 +544,18 @@ int set_response(Connect *c, Stream *resp)
             set_error_message(c, resp, RS500);
             return 0;
         }
+
+        resp->resp_status = RS200;
         resp->resp_content_len = resp->buf.size();
         if (resp->httpMethod == M_HEAD)
             resp->buf.init();
         //------------- headers frame --------------
         set_frame_headers(resp);
         add_header(resp, 8);                                          // "200 OK"
-        add_header(resp, 54, conf->ServerSoftware.c_str());           // "server"
-        add_header(resp, 33, get_time().c_str());                     // "date"
-        add_header(resp, 31, "text/html;charset=UTF-8");              // "content-type"
-        add_header(resp, 24, "no-cache, no-store, must-revalidate");  // "cache-control"
+        add_header(resp->headers, 54, conf->ServerSoftware.c_str());  // "server"
+        add_header(resp->headers, 33, get_time().c_str());            // "date"
+        add_header(resp->headers, 31, "text/html;charset=UTF-8");     // "content-type"
+        add_header(resp->headers, 24, "no-cache, no-store, must-revalidate");// "cache-control"
         resp->create_headers = true;
 
         if (resp->httpMethod == M_HEAD)
@@ -806,7 +776,7 @@ int EventHandlerClass::recv_frame_(Connect *c)
             return ret;
         }
 
-        c->h2->body.cat(buf, ret);
+        c->h2->body.ncat(buf, ret);
         c->h2->body_len -= ret;
         if (c->h2->body_len == 0)
             c->h2->header_len = 0;
@@ -870,7 +840,7 @@ int EventHandlerClass::parse_frame(Connect *c)
 
             c->h2->recv_settings = true;
             if (c->h2->settings.size() == 0)
-                c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
+                c->h2->settings.ncpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
         }
         else
         {
@@ -886,7 +856,7 @@ int EventHandlerClass::parse_frame(Connect *c)
             {
                 c->h2->recv_settings = true;
                 if (c->h2->settings.size() == 0)
-                    c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
+                    c->h2->settings.ncpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
             }
         }
     }
@@ -922,7 +892,7 @@ int EventHandlerClass::parse_frame(Connect *c)
             }
             else if ((resp->cgi_type == FASTCGI) || (resp->cgi_type == PHPFPM))
             {
-                resp->post_data.cat("\1\5\0\1\0\0\0\0", 8);
+                resp->post_data.ncat("\1\5\0\1\0\0\0\0", 8);
                 resp->post_content_len = -1; // end post data
             }
 
@@ -955,19 +925,19 @@ int EventHandlerClass::parse_frame(Connect *c)
 
         if ((resp->cgi_type <= PHPCGI) || (resp->cgi_type == SCGI))
         {
-            resp->post_data.cat(p_buf, body_len);
+            resp->post_data.ncat(p_buf, body_len);
         }
         else if ((resp->cgi_type == FASTCGI) || (resp->cgi_type == PHPFPM))
         {
             char s[8];
             fcgi_set_header(s, FCGI_STDIN, body_len);
-            resp->post_data.cat(s, 8);
+            resp->post_data.ncat(s, 8);
             if (body_len)
             {
-                resp->post_data.cat(p_buf, body_len);
+                resp->post_data.ncat(p_buf, body_len);
                 if (c->h2->header[4] & FLAG_END_STREAM)
                 {
-                    resp->post_data.cat("\1\5\0\1\0\0\0\0", 8);
+                    resp->post_data.ncat("\1\5\0\1\0\0\0\0", 8);
                     resp->post_content_len = -1; // end post data
                     return 0;
                 }
@@ -1062,8 +1032,8 @@ int EventHandlerClass::parse_frame(Connect *c)
         if (conf->PrintDebugMsg)
             hex_print_stderr("recv PING", __LINE__, c->h2->body.ptr(), c->h2->body.size());
         print_err(c, "recv PING\n");
-        c->h2->ping.cpy("\x0\x0\x8\x6\x1\x0\x0\x0\x0", 9);
-        c->h2->ping.cat(c->h2->body.ptr(), c->h2->body.size());
+        c->h2->ping.ncpy("\x0\x0\x8\x6\x1\x0\x0\x0\x0", 9);
+        c->h2->ping.ncat(c->h2->body.ptr(), c->h2->body.size());
     }
     else if (c->h2->type == WINDOW_UPDATE)
     {
@@ -1094,7 +1064,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                 return -1;
             }
 
-            c->h2->set_window_size(c->numConn, c->h2->id, n);
+            c->h2->set_window_size(c->h2->id, n);
             if (conf->PrintDebugMsg)
                 print_err("[%lu] WINDOW_UPDATE %ld id=%d \n", c->numConn, n, c->h2->id);
         }
@@ -1268,6 +1238,11 @@ int EventHandlerClass::send_frame_headers(Connect *c, Stream *resp)
 
     if (resp->headers.size())
     {
+        int len = resp->headers.size() - 9;
+        resp->headers.set_byte(len, 2);
+        resp->headers.set_byte(len>>=8, 1);
+        resp->headers.set_byte(len>>8, 0);
+
         int ret = write_to_client(c, resp->headers.ptr_remain(), resp->headers.size_remain(), resp->id);
         if (ret < 0)
         {
@@ -1422,7 +1397,7 @@ int EventHandlerClass::send_frame_settings(Connect *c)
     else
     {
         if (c->h2->recv_settings)
-            c->h2->settings.cpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
+            c->h2->settings.ncpy("\x00\x00\x00\x04\x01\x00\x00\x00\x00", 9);
         else
             c->h2->settings.init();
     }

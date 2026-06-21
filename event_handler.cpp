@@ -636,9 +636,9 @@ void EventHandlerClass::http1_set_poll(Connect *c)
         {
             c->h1->con_status = http1::SEND_RESP_HEADERS;
             c->h1->resp.resp_status = RS301;
-            c->h1->hdrs.cpy_str("Location: ");
-            c->h1->hdrs.cat(c->serv->redirect.c_str(), c->serv->redirect.size());
-            c->h1->hdrs.cat("\r\n", 2);
+            c->h1->hdrs.strcpy("Location: ");
+            c->h1->hdrs.ncat(c->serv->redirect.c_str(), c->serv->redirect.size());
+            c->h1->hdrs.ncat("\r\n", 2);
             send_message(c, "301 Moved Permanently");
             c->h1->connKeepAlive = false;
 
@@ -820,12 +820,6 @@ int EventHandlerClass::_poll()
             http2_poll(c, i);
         }
     }
-    return 0;
-}
-//======================================================================
-int EventHandlerClass::http1_poll(Connect *c, int revents)
-{
-    http1_worker(c, revents);
     return 0;
 }
 //======================================================================

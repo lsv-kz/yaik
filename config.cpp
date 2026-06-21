@@ -4,10 +4,11 @@ using namespace std;
 
 static Config c;
 const Config* const conf = &c;
+static int set_max_fd(int max_open_fd);
 //======================================================================
 enum { CURRENT_DIR, PARENT_DIR, ADD_FOLDER };
 //======================================================================
-int parse_folder(const char *s, int i)// "../", "/../", "/.."
+static int parse_folder(const char *s, int i)// "../", "/../", "/.."
 {
     if (!strncmp(s, "../", i) )
         return PARENT_DIR;
@@ -24,7 +25,7 @@ int parse_folder(const char *s, int i)// "../", "/../", "/.."
     return ADD_FOLDER;
 }
 //======================================================================
-void *memrchr_(const void *s, char c, int n)
+static void *memrchr_(const void *s, char c, int n)
 {
     if (n > 0)
     {
@@ -38,7 +39,7 @@ void *memrchr_(const void *s, char c, int n)
     return NULL;
 }
 //======================================================================
-int absolute_path(string& path)
+static int absolute_path(string& path)
 {
     struct stat st;
     int ret = stat(path.c_str(), &st);
@@ -215,7 +216,7 @@ int absolute_path(string& path)
     return 0;
 }
 //======================================================================
-void create_conf_file(const char *path)
+static void create_conf_file(const char *path)
 {
     FILE *f = fopen(path, "w");
     if (!f)
@@ -275,7 +276,7 @@ void create_conf_file(const char *path)
 static int line_ = 1, line_inc = 0;
 static char bracket = 0;
 //----------------------------------------------------------------------
-int getLine(FILE *f, char *str, int size)
+static int getLine(FILE *f, char *str, int size)
 {
     if ((str == NULL) || (size == 0))
     {
@@ -363,7 +364,7 @@ int getLine(FILE *f, char *str, int size)
     return -1;
 }
 //======================================================================
-int is_number(const char *s)
+static int is_number(const char *s)
 {
     if (!s)
         return 0;
@@ -373,7 +374,7 @@ int is_number(const char *s)
     return n;
 }
 //======================================================================
-int find_bracket(FILE *f, char c)
+static int find_bracket(FILE *f, char c)
 {
     if (bracket)
     {
@@ -414,7 +415,7 @@ int find_bracket(FILE *f, char c)
     return 0;
 }
 //======================================================================
-void create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2, CGI_TYPE type)
+static void create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2, CGI_TYPE type)
 {
     if (l == NULL)
     {
@@ -440,7 +441,7 @@ void create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2, CGI_TY
     *l = t;
 }
 //======================================================================
-int read_conf_file(FILE *fconf)
+static int read_conf_file(FILE *fconf)
 {
     char str[1024];
     bool set_default_server = false;
@@ -973,7 +974,7 @@ int set_uid()
             struct passwd *passwdbuf = getpwuid(c.server_uid);
             if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwuid(%u): %s\n", __func__, __LINE__, c.server_uid, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getpwuid(%u)=%p: %s\n", __func__, __LINE__, c.server_uid, passwdbuf, strerror(errno));
                 return -1;
             }
         }
@@ -982,7 +983,7 @@ int set_uid()
             struct passwd *passwdbuf = getpwnam(c.user.c_str());
             if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwnam(%s): %s\n", __func__, __LINE__, c.user.c_str(), strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getpwnam(%s)=%p: %s\n", __func__, __LINE__, c.user.c_str(), passwdbuf, strerror(errno));
                 return -1;
             }
             c.server_uid = passwdbuf->pw_uid;
@@ -994,7 +995,7 @@ int set_uid()
             struct group *groupbuf = getgrgid(c.server_gid);
             if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrgid(%u): %s\n", __func__, __LINE__, c.server_gid, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getgrgid(%u)=%p: %s\n", __func__, __LINE__, c.server_gid, groupbuf, strerror(errno));
                 return -1;
             }
         }
@@ -1003,12 +1004,21 @@ int set_uid()
             struct group *groupbuf = getgrnam(c.group.c_str());
             if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrnam(%s): %s\n", __func__, __LINE__, c.group.c_str(), strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getgrnam(%s)=%p: %s\n", __func__, __LINE__, c.group.c_str(), groupbuf, strerror(errno));
                 return -1;
             }
             c.server_gid = groupbuf->gr_gid;
         }
         //--------------------------------------------------------------
+        if (c.server_gid != getgid())
+        {
+            if (setgid(c.server_gid) == -1)
+            {
+                fprintf(stderr, "<%s:%d> Error setgid(%u): %s\n", __func__, __LINE__, c.server_gid, strerror(errno));
+                return -1;
+            }
+        }
+
         if (c.server_uid != uid)
         {
             if (setuid(c.server_uid) == -1)
@@ -1027,7 +1037,7 @@ int set_uid()
     return 0;
 }
 //======================================================================
-int set_max_fd(int max_open_fd)
+static int set_max_fd(int max_open_fd)
 {
     struct rlimit lim;
     if (getrlimit(RLIMIT_NOFILE, &lim) == -1)

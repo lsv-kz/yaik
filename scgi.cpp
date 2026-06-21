@@ -2,8 +2,6 @@
 
 using namespace std;
 //======================================================================
-static int scgi_create_params(Connect *c, Stream *resp);
-//======================================================================
 static int scgi_set_size_data(BytesArray *ba)
 {
     ba->set_byte(':', 7);
@@ -20,37 +18,13 @@ static int scgi_set_size_data(BytesArray *ba)
     if (size != 0)
         return -1;
 
-    ba->cat(",", 1);
+    ba->ncat(",", 1);
     ba->inc_offset(i);
 
     return 0;
 }
 //======================================================================
-int scgi_create_connect(Connect *c, Stream *resp)
-{
-    resp->cgi.fd = create_fcgi_socket(resp->cgi.socket->c_str());
-    if (resp->cgi.fd < 0)
-    {
-        print_err(resp, "<%s:%d> Error connect to scgi\n", __func__, __LINE__);
-        return resp->cgi.fd;
-    }
-
-    int ret = scgi_create_params(c, resp);
-    if (ret < 0)
-        return ret;
-    else
-    {
-        resp->cgi.timer = 0;
-        c->client_timer = 0;
-        int opt = 1;
-        ioctl(resp->cgi.fd, FIONBIO, &opt);
-    }
-
-    resp->cgi_status = SCGI_PARAMS;
-    return 0;
-}
-//======================================================================
-int scgi_add_param(Stream *resp, const char *name, const char *val, int len_val)
+static int scgi_add_param(Stream *resp, const char *name, const char *val, int len_val)
 {
     if (name == NULL)
     {
@@ -70,23 +44,23 @@ int scgi_add_param(Stream *resp, const char *name, const char *val, int len_val)
         return -1;
     }
 
-    resp->send_data.cat(name, len_name);
-    resp->send_data.cat("\0", 1);
+    resp->send_data.ncat(name, len_name);
+    resp->send_data.ncat("\0", 1);
 
     if (len_val > 0)
     {
-        resp->send_data.cat(val, len_val);
+        resp->send_data.ncat(val, len_val);
     }
 
-    resp->send_data.cat("\0", 1);
+    resp->send_data.ncat("\0", 1);
 
     return 0;
 }
 //======================================================================
-int scgi_create_params(Connect *c, Stream *resp)
+static int scgi_create_params(Connect *c, Stream *resp)
 {
     int ret = 0;
-    resp->send_data.cpy("\0\0\0\0\0\0\0\0", 8);
+    resp->send_data.ncpy("\0\0\0\0\0\0\0\0", 8);
     resp->send_data.reserve(768);
 
     if (resp->httpMethod == M_POST)
@@ -266,5 +240,29 @@ int EventHandlerClass::scgi_worker(Connect* c, Stream *resp, int cgi_ind_poll)
         }
     }
 
+    return 0;
+}
+//======================================================================
+int scgi_create_connect(Connect *c, Stream *resp)
+{
+    resp->cgi.fd = create_fcgi_socket(resp->cgi.socket->c_str());
+    if (resp->cgi.fd < 0)
+    {
+        print_err(resp, "<%s:%d> Error connect to scgi\n", __func__, __LINE__);
+        return resp->cgi.fd;
+    }
+
+    int ret = scgi_create_params(c, resp);
+    if (ret < 0)
+        return ret;
+    else
+    {
+        resp->cgi.timer = 0;
+        c->client_timer = 0;
+        int opt = 1;
+        ioctl(resp->cgi.fd, FIONBIO, &opt);
+    }
+
+    resp->cgi_status = SCGI_PARAMS;
     return 0;
 }

@@ -135,7 +135,7 @@ int strcmp_case(const char *s1, const char *s2)
     return (*s1 - *s2);
 }
 //======================================================================
-int pow_(int x, int y)
+static int pow_(int x, int y)
 {
     if (y < 0)
         return -1;
@@ -576,56 +576,28 @@ int bytes_to_int(unsigned char prefix, int pref_len, const char *s, int size, in
     return data;
 }
 //======================================================================
-int int_to_bytes(int data, int pref_len, BytesArray& buf)
-{
-    int ret = 0;
-
-    if (data < (pow_(2, pref_len) - 1))
-    {
-        buf.cat((char)data);
-        ++ret;
-    }
-    else
-    {
-        buf.cat(pow_(2, pref_len) - 1);
-        ++ret;
-        data = data - (pow_(2, pref_len) - 1);
-        while (data > 128)
-        {
-            buf.cat(data % 128 + 128);
-            ++ret;
-            data = data / 128;
-        }
-
-        buf.cat((char)data);
-        ++ret;
-    }
-
-    return ret;
-}
-//======================================================================
 int int_to_bytes(BytesArray& buf, int data, int pref_len, int huff_coding_mask)
 {
     int ret = 0;
 
     if (data < (pow_(2, pref_len) - 1))
     {
-        buf.cat((data | huff_coding_mask));
+        buf.bytecat((data | huff_coding_mask));
         ++ret;
     }
     else
     {
-        buf.cat((pow_(2, pref_len) - 1) | huff_coding_mask);
+        buf.bytecat((pow_(2, pref_len) - 1) | huff_coding_mask);
         ++ret;
         data = data - (pow_(2, pref_len) - 1);
         while (data > 128)
         {
-            buf.cat(data % 128 + 128);
+            buf.bytecat(data % 128 + 128);
             ++ret;
             data = data / 128;
         }
 
-        buf.cat((char)data);
+        buf.bytecat((char)data);
         ++ret;
     }
 
@@ -742,15 +714,27 @@ int parse_range(const char *s, long long file_size, long long *offset, long long
     return 1;
 }
 //======================================================================
-void resp_204(Stream *resp)
+static void set_error(Stream *resp, int err)
 {
+    const char *status = http2_status_resonse(err);
+    if (status == NULL)
+    {
+        resp->resp_status = RS500;
+        status = "500";
+    }
+    else
+        resp->resp_status = err;
     set_frame_headers(resp);
-    add_header(resp, 8, "204");
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 28, "0");
+    add_header(resp->headers, 8, status);
+    add_header(resp->headers, 54, conf->ServerSoftware.c_str());
+    add_header(resp->headers, 33, get_time().c_str());
+    add_header(resp->headers, 31, "text/plain");
     resp->create_headers = true;
-    set_frame_data(resp, 0, FLAG_END_STREAM);
+
+    const char *err_msg = http1_status_response(err);
+    int len = strlen(err_msg);
+    set_frame_data(resp, len, FLAG_END_STREAM);
+    resp->send_data.ncat(err_msg, len);
 }
 //======================================================================
 void set_error_message(Connect *c, Stream *resp, int err)
@@ -766,21 +750,6 @@ void set_error_message(Connect *c, Stream *resp, int err)
         else
             set_error(resp, err);
     }
-}
-//======================================================================
-void set_error(Stream *resp, int err)
-{
-    set_frame_headers(resp);
-    add_header(resp, 8, http2_status_resonse(err));
-    add_header(resp, 54, conf->ServerSoftware.c_str());
-    add_header(resp, 33, get_time().c_str());
-    add_header(resp, 31, "text/plain");
-    resp->create_headers = true;
-print_err(resp, "<%s:%d> --- set_error %d --- id=%d \n", __func__, __LINE__, err, resp->id);
-    const char *err_msg = http1_status_response(err);
-    int len = strlen(err_msg);
-    set_frame_data(resp, len, FLAG_END_STREAM);
-    resp->send_data.cat(err_msg, len);
 }
 //======================================================================
 const char *http2_status_resonse(int st)
@@ -846,7 +815,7 @@ const char *http2_status_resonse(int st)
         default:
             return "500";
     }
-    return "";
+    return NULL;
 }
 //======================================================================
 void hex_print_stderr(const char *s, int line, const void *p, int n)

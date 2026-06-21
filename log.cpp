@@ -20,12 +20,12 @@ void create_logfile(const string& log_dir)
     strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &tm1);
 
     BytesArray file_name;
-    file_name.cpy(log_dir.c_str(), log_dir.size());
-    file_name.cat("/", 1);
-    file_name.cat_str(buf);
-    file_name.cat("-", 1);
-    file_name.cat(conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
-    file_name.cat_str(".log");
+    file_name.ncpy(log_dir.c_str(), log_dir.size());
+    file_name.ncat("/", 1);
+    file_name.strcat(buf);
+    file_name.ncat("-", 1);
+    file_name.ncat(conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
+    file_name.strcat(".log");
 
     flog = open(file_name.ptr(), O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (flog == -1)
@@ -46,12 +46,12 @@ void create_error_logfile(const string& log_dir)
     strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &tm1);
 
     BytesArray file_name;
-    file_name.cpy(log_dir.c_str(), log_dir.size());
-    file_name.cat_str("/error_");
-    file_name.cat_str(buf);
-    file_name.cat("_", 1);
-    file_name.cat(conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
-    file_name.cat_str(".log");
+    file_name.ncpy(log_dir.c_str(), log_dir.size());
+    file_name.strcat("/error_");
+    file_name.strcat(buf);
+    file_name.ncat("_", 1);
+    file_name.ncat(conf->ServerSoftware.c_str(), conf->ServerSoftware.size());
+    file_name.strcat(".log");
 
     flog_err = open(file_name.ptr(), O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (flog_err == -1)
@@ -85,9 +85,9 @@ void print_err(const char *format, ...)
         return;
     }
 
-    str.cat_str(buf);
+    str.strcat(buf);
     if (n >= (int)sizeof(buf))
-        str.cat_str("--- overflow ---\n");
+        str.strcat("--- overflow ---\n");
 
 mtxLog.lock();
     write(flog_err, str.ptr(), str.size());
@@ -128,14 +128,14 @@ void print_err(Connect *con, const char *format, ...)
         return;
     }
 
-    str.cpy("[", 1);
-    str.cat_logtime();
-    str.cat("] - [", 5);
+    str.ncpy("[", 1);
+    str.logtimecat();
+    str.ncat("] - [", 5);
     str.cat_int(con->numConn);
-    str.cat("] ", 2);
-    str.cat_str(buf);
+    str.ncat("] ", 2);
+    str.strcat(buf);
     if (n >= (int)sizeof(buf))
-        str.cat_str("--- overflow ---\n");
+        str.strcat("--- overflow ---\n");
 
 mtxLog.lock();
     write(flog_err, str.ptr(), str.size());
@@ -180,16 +180,16 @@ void print_err(Stream *resp, const char *format, ...)
         return;
     }
 
-    str.cpy("[", 1);
-    str.cat_logtime();
-    str.cat("] - [", 5);
+    str.ncpy("[", 1);
+    str.logtimecat();
+    str.ncat("] - [", 5);
     str.cat_int(resp->numConn);
-    str.cat("/", 1);
+    str.ncat("/", 1);
     str.cat_int(resp->numReq);
-    str.cat("] ", 2);
-    str.cat_str(buf);
+    str.ncat("] ", 2);
+    str.strcat(buf);
     if (n >= (int)sizeof(buf))
-        str.cat_str("--- overflow ---\n");
+        str.strcat("--- overflow ---\n");
 
 mtxLog.lock();
     write(flog_err, str.ptr(), str.size());
@@ -225,42 +225,42 @@ void print_log(Connect *c, Stream *resp)
     }
 
     str.cpy_int(resp->numConn);
-    str.cat("/", 1);
+    str.ncat("/", 1);
     str.cat_int(resp->numReq);
-    str.cat_str(" - ");
-    str.cat_str(c->remoteAddr);
-    str.cat(" > ", 3);
-    str.cat(c->serv->port.c_str(), c->serv->port.size());
-    str.cat(" - [", 4);
-    str.cat_logtime();
-    str.cat("] \"", 3);
-    str.cat_str(get_str_method(resp->httpMethod));
-    str.cat(" ", 1);
-    str.cat_str(resp->clean_decode_path);
+    str.strcat(" - ");
+    str.strcat(c->remoteAddr);
+    str.ncat(" > ", 3);
+    str.ncat(c->serv->port.c_str(), c->serv->port.size());
+    str.ncat(" - [", 4);
+    str.logtimecat();
+    str.ncat("] \"", 3);
+    str.strcat(get_str_method(resp->httpMethod));
+    str.ncat(" ", 1);
+    str.strcat(resp->clean_decode_path);
 
     if (resp->decode_query_string.size())
     {
-        str.cat("?", 1);
-        str.cat(resp->decode_query_string.c_str(), resp->decode_query_string.size());
+        str.ncat("?", 1);
+        str.ncat(resp->decode_query_string.c_str(), resp->decode_query_string.size());
     }
 
-    str.cat_str(" HTTP/2\" ");
+    str.strcat(" HTTP/2\" ");
     str.cat_int(resp->resp_status);
-    str.cat(" ", 1);
+    str.ncat(" ", 1);
     str.cat_int(resp->send_bytes);
-    str.cat(" \"", 2);
+    str.ncat(" \"", 2);
     if (resp->referer.size())
-        str.cat(resp->referer.c_str(), resp->referer.size());
+        str.ncat(resp->referer.c_str(), resp->referer.size());
     else
-        str.cat("-", 1);
-    str.cat("\" \"", 3);
+        str.ncat("-", 1);
+    str.ncat("\" \"", 3);
     if (resp->user_agent.size())
-        str.cat(resp->user_agent.c_str(), resp->user_agent.size());
+        str.ncat(resp->user_agent.c_str(), resp->user_agent.size());
     else
-        str.cat("-", 1);
-    str.cat("\" - id=", 7);
+        str.ncat("-", 1);
+    str.ncat("\" - id=", 7);
     str.cat_int(resp->id);
-    str.cat(" \n", 2);
+    str.ncat(" \n", 2);
 
 mtxLog.lock();
     write(flog, str.ptr(), str.size());
@@ -289,40 +289,40 @@ void print_log(Connect *c)
     }
 
     str.cpy_int(c->numConn);
-    str.cat("/", 1);
+    str.ncat("/", 1);
     str.cat_int(c->numReq);
-    str.cat_str(" - ");
-    str.cat_str(c->remoteAddr);
-    str.cat(" > ", 3);
-    str.cat(c->serv->port.c_str(), c->serv->port.size());
-    str.cat(" - [", 4);
-    str.cat_logtime();
-    str.cat("] \"", 3);
-    str.cat_str(get_str_method(c->h1->resp.httpMethod));
-    str.cat(" ", 1);
-    str.cat_str(c->h1->resp.clean_decode_path);
+    str.strcat(" - ");
+    str.strcat(c->remoteAddr);
+    str.ncat(" > ", 3);
+    str.ncat(c->serv->port.c_str(), c->serv->port.size());
+    str.ncat(" - [", 4);
+    str.logtimecat();
+    str.ncat("] \"", 3);
+    str.strcat(get_str_method(c->h1->resp.httpMethod));
+    str.ncat(" ", 1);
+    str.strcat(c->h1->resp.clean_decode_path);
 
     if (c->h1->resp.decode_query_string.size())
     {
-        str.cat("?", 1);
-        str.cat(c->h1->resp.decode_query_string.c_str(), c->h1->resp.decode_query_string.size());
+        str.ncat("?", 1);
+        str.ncat(c->h1->resp.decode_query_string.c_str(), c->h1->resp.decode_query_string.size());
     }
 
-    str.cat_str(" HTTP/1.1\" ");
+    str.strcat(" HTTP/1.1\" ");
     str.cat_int(c->h1->resp.resp_status);
-    str.cat(" ", 1);
+    str.ncat(" ", 1);
     str.cat_int(c->h1->resp.send_bytes);
-    str.cat(" \"", 2);
+    str.ncat(" \"", 2);
     if (c->h1->resp.referer.size())
-        str.cat(c->h1->resp.referer.c_str(), c->h1->resp.referer.size());
+        str.ncat(c->h1->resp.referer.c_str(), c->h1->resp.referer.size());
     else
-        str.cat("-", 1);
-    str.cat("\" \"", 3);
+        str.ncat("-", 1);
+    str.ncat("\" \"", 3);
     if (c->h1->resp.user_agent.size())
-        str.cat(c->h1->resp.user_agent.c_str(), c->h1->resp.user_agent.size());
+        str.ncat(c->h1->resp.user_agent.c_str(), c->h1->resp.user_agent.size());
     else
-        str.cat("-", 1);
-    str.cat("\"\n", 2);
+        str.ncat("-", 1);
+    str.ncat("\"\n", 2);
 
 mtxLog.lock();
     write(flog, str.ptr(), str.size());

@@ -330,7 +330,7 @@ int huffman_encode(const char *in, BytesArray& out)
 
         while (huff_buf_len >= 8)
         {
-            out.cat((unsigned char)(huff_buf>>(huff_buf_len - 8)));
+            out.bytecat((unsigned char)(huff_buf>>(huff_buf_len - 8)));
             out_len++;
             huff_buf_len -= 8;
         }
@@ -339,7 +339,7 @@ int huffman_encode(const char *in, BytesArray& out)
     if (huff_buf_len > 0)
     {
         unsigned char uch = 0xff>>huff_buf_len;
-        out.cat(uch | (huff_buf<<(8 - huff_buf_len)));
+        out.bytecat(uch | (huff_buf<<(8 - huff_buf_len)));
         out_len++;
     }
 

@@ -20,7 +20,7 @@ http2::http2()
     num_streams = err = 0;
     work_stream = start_stream = end_stream = NULL;
 
-    settings.cpy("\x00\x00\x0c\x04\x00\x00\x00\x00\x00" // SETTINGS (type=0x4)
+    settings.ncpy("\x00\x00\x0c\x04\x00\x00\x00\x00\x00" // SETTINGS (type=0x4)
                 "\x00\x01\x00\x00\x00\x00"              // SETTINGS_HEADER_TABLE_SIZE (0x1)  size of the dynamic table
                 "\x00\x03\x00\x00\x00\x00"              // SETTINGS_MAX_CONCURRENT_STREAMS (0x3)
                 , 9 + 12);
@@ -171,7 +171,7 @@ int http2::close_stream(int id)
     return -1;
 }
 //----------------------------------------------------------------------
-int http2::set_window_size(unsigned long num_conn, int id, long n)
+int http2::set_window_size(int id, long n)
 {
     Stream *r = start_stream, *next = NULL;
     for ( ; r; r = next)

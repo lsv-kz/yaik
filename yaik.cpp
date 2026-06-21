@@ -6,6 +6,7 @@ const char *nameConfifFile = "yaik.conf";
 static string confPath;
 
 void print_config();
+int set_uid();
 //======================================================================
 static void signal_handler(int signo)
 {
@@ -57,6 +58,11 @@ int main(int argc, char *argv[])
     confPath = nameConfifFile;
     if (read_conf_file(confPath.c_str()))
         return 1;
+    if (set_uid())
+    {
+        return 1;
+    }
+
     cout << "   ===============================\n";
     cout << "   DocumentRoot : " << conf->DocumentRoot.c_str() << "\n";
     cout << "   ScriptPath : " << conf->ScriptPath.c_str() << "\n";
@@ -101,7 +107,6 @@ int main(int argc, char *argv[])
     cout << "\nDocumentRoot: " << conf->DocumentRoot.c_str() << "\n";
     cerr << "HeaderTableSize: " << conf->HeaderTableSize << "\n";
     pid_t gid = getgid();
-    cout << "pid="  << pid << "; uid=" << getuid() << "; gid=" << gid << "\n";
     cerr << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << gid
          << "\n   NumCpuCores: " << thread::hardware_concurrency() << "\n";
     //print_config();

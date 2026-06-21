@@ -296,7 +296,7 @@ int socket_read_line(Connect *c)
             }
 
             if (len > 0)
-                c->h1->resp.buf.cat(buf, len);
+                c->h1->resp.buf.ncat(buf, len);
             return 1;
         }
         else
@@ -317,7 +317,7 @@ int socket_read_line(Connect *c)
                 if (buf[ret - 1] == '\r')
                     --ret;
                 if (ret > 0)
-                    c->h1->resp.buf.cat(buf, ret);
+                    c->h1->resp.buf.ncat(buf, ret);
                 return 0;
             }
         }

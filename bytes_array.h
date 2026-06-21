@@ -71,11 +71,11 @@ public:
     {
         if (err)
             return -1;
-        if ((buf_size >= new_size) || (new_size == 0))
+        if ((new_size <= buf_size) || (new_size == 0))
             return buf_size;
         new_size += array_reserve;
-        char *tmp_buf = new(std::nothrow) char [new_size];
-        if (!tmp_buf)
+        char *new_ptr = new(std::nothrow) char [new_size + 1];
+        if (new_ptr == NULL)
         {
             fprintf(stderr, "<%s:%d> Error new char [%d]\n", __func__, __LINE__, new_size);
             err = -1;
@@ -85,83 +85,86 @@ public:
         if (buf)
         {
             if (buf_len > 0)
-                memcpy(tmp_buf, buf, buf_len + 1);
+                memcpy(new_ptr, buf, buf_len + 1);
             delete [] buf;
         }
 
-        buf = tmp_buf;
+        buf = new_ptr;
         buf_size = new_size;
         return 0;
     }
     //------------------------------------------------------------------
-    int cpy(const char *b, unsigned int len)
+    int ncpy(const char *b, unsigned int len)
     {
-        if ((b == NULL) || (len == 0) || err)
+        if (err)
         {
-            fprintf(stderr, "<%s:%d> %p, len=%d, error=%d\n", __func__, __LINE__, b, len, err);
+            fprintf(stderr, "<%s:%d> error=%d\n", __func__, __LINE__, err);
             return -1;
         }
 
-        if (buf_size <= len)
+        buf_len = offset = 0;
+        if ((b == NULL) || (len == 0))
+            return 0;
+
+        if (len > buf_size)
         {
-            if (reserve(len + 1))
+            if (reserve(len))
                 return -1;
         }
 
         memcpy(buf, b, len);
         buf_len = len;
-        offset = 0;
-        buf[buf_len] = 0;
         return 0;
     }
     //------------------------------------------------------------------
-    int cat(const char *b, unsigned int len)
+    int ncat(const char *b, unsigned int len)
     {
-        if ((b == NULL) || (len == 0) || err)
+        if (err)
         {
-            fprintf(stderr, "<%s:%d> %p, len=%d, error=%d\n", __func__, __LINE__, b, len, err);
+            fprintf(stderr, "<%s:%d> error=%d\n", __func__, __LINE__, err);
             return -1;
         }
 
-        if (buf_size <= (buf_len + len))
+        if ((b == NULL) || (len == 0))
+            return 0;
+
+        if ((buf_len + len) > buf_size)
         {
-            if (reserve(buf_len + len + 1))
+            if (reserve(buf_len + len))
                 return -1;
         }
 
         memcpy(buf + buf_len, b, len);
         buf_len += len;
-        buf[buf_len] = 0;
         return 0;
     }
     //------------------------------------------------------------------
-    int cat(const char b)
+    int bytecat(const char ch)
     {
         if (err)
             return -1;
-        if (buf_size <= (buf_len + 1))
+        if ((buf_len + 1) > buf_size)
         {
-            if (reserve(buf_len + 2))
+            if (reserve(buf_len + 1))
                 return -1;
         }
 
-        buf[buf_len] = b;
+        buf[buf_len] = ch;
         buf_len += 1;
-        buf[buf_len] = 0;
         return 0;
     }
     //------------------------------------------------------------------
-    int cpy_int(long long ll) { return cpy_str(ll_to_string(ll)); }
+    int cpy_int(long long ll) { return strcpy(ll_to_string(ll)); }
     //------------------------------------------------------------------
-    int cat_int(long long ll) { return cat_str(ll_to_string(ll)); }
+    int cat_int(long long ll) { return strcat(ll_to_string(ll)); }
     //------------------------------------------------------------------
-    int cpy_str(const char *s)
+    int strcpy(const char *s)
     {
         if ((s == NULL) || err)
             return -1;
         unsigned int len = strlen(s);
         if (len)
-            return cpy(s, len);
+            return ncpy(s, len);
         else
         {
             buf_len = 0;
@@ -170,18 +173,18 @@ public:
         }
     }
     //------------------------------------------------------------------
-    int cat_str(const char *s)
+    int strcat(const char *s)
     {
         if ((s == NULL) || err)
             return -1;
         unsigned int len = strlen(s);
         if (len)
-            return cat(s, len);
+            return ncat(s, len);
         else
             return 0;
     }
     //------------------------------------------------------------------
-    void cat_time()
+    void timecat()
     {
         if (err)
             return;
@@ -191,10 +194,10 @@ public:
     
         gmtime_r(&now, &t);
         unsigned int len = strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %Z", &t);
-        cat(s, len);
+        ncat(s, len);
     }
     //------------------------------------------------------------------
-    void cat_logtime()
+    void logtimecat()
     {
         if (err)
             return;
@@ -204,7 +207,7 @@ public:
     
         localtime_r(&now, &t);
         unsigned int len = strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S %Z", &t);
-        cat(s, len);
+        ncat(s, len);
     }
     //------------------------------------------------------------------
     const char *ptr()
@@ -229,11 +232,12 @@ public:
             return "";
     }
     //------------------------------------------------------------------
-    int set_len(unsigned int n)
+    int truncation(unsigned int n)
     {
-        if (n >= buf_size)
+        if (n >= buf_len)
             return buf_len;
         buf_len = n;
+        offset = 0;
         return buf_len;
     }
     //------------------------------------------------------------------
