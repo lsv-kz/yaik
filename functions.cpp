@@ -172,7 +172,7 @@ const char *get_str_method(int i)
     return "";
 }
 //======================================================================
-const char *get_str_frame_type(FRAME_TYPE t)
+const char *get_str_frame_type(HTTP2_FRAME_TYPE t)
 {
     switch (t)
     {

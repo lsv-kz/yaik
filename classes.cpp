@@ -38,10 +38,13 @@ http2::http2()
     if (conf->HeaderTableSize > 0)
     {
         dyn_tab = new(std::nothrow) DynamicTable(conf->HeaderTableSize, 62);
-        if (!dyn_tab)
+        if (dyn_tab == NULL)
         {
-            print_err("<%s:%d>Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-            exit(1);
+            print_err("<%s:%d> Error new()\n", __func__, __LINE__);
+            settings.set_byte(0, 11);
+            settings.set_byte(0, 12);
+            settings.set_byte(0, 13);
+            settings.set_byte(0, 14);
         }
     }
     else
@@ -324,7 +327,7 @@ int http2::parse(Stream *r)
         }
 
         if (ch > 0x80)
-        {// <0x81 ... 0xFF> ; static table: [0x81 ... 0x3D], dynamic table: [0x3E ...]
+        {// <0x81 ... 0xFF> ; static table: [0x81 ... 0xBD], dynamic table: [0xBE ...]
             int ind = bytes_to_int(ch & 0x7f, 7, body.ptr(), body.size(), &offset);
             if (get_header(ind, name, val, NULL) < 0)
                 return -1;
@@ -367,7 +370,7 @@ int http2::parse(Stream *r)
         }
 
         if (conf->PrintDebugMsg)
-            print_err("[%lu/%lu] [%s: %s]\n", r->numConn, r->numReq, name.c_str(), val.c_str());
+            print_err("[%lu/%lu] 0x%02X [%s: %s]\n", r->numConn, r->numReq, ch, name.c_str(), val.c_str());
 
         if (name == ":method")
         {
@@ -435,45 +438,44 @@ int DynamicTable::add(std::string& name, std::string& val)
     while ((table_size + size) > max_table_size)
     {
         --headers_num;
-        delete [] table[headers_num].name;
-        table[headers_num].name = NULL;
-        table[headers_num].val = NULL;
-        table_size -= table[headers_num].size;
-        table[headers_num].size = 0;
-        if (table_size <= 0)
+        if (list_end)
         {
+            table_size -= list_end->size;
+            Header *prev = list_end->prev;
+            delete list_end;
+            list_end = prev;
+            list_end->next = NULL;
+        }
+        else
+        {
+            fprintf(stderr, "<%s:%d> ??? Error\n", __func__, __LINE__);
             return -1;
         }
     }
 
-    if (headers_num >= max_headers_num)
+    char *buf = new(std::nothrow) char [sizeof(Header) + name.size() + val.size() + 2];
+    if (buf == NULL)
     {
-        print_err("<%s:%d> Error headers_num(%d) >= max_headers_num(%d)\n", __func__, __LINE__, 
-                        headers_num, max_table_size);
+        fprintf(stderr, "<%s:%d> Error new()\n", __func__, __LINE__);
         return -1;
     }
 
-    for ( int i = headers_num; i > 0; --i)
-    {
-        table[i] = table[i - 1];
-    }
+    Header *h = (Header*)buf;
+    memcpy(h->name, name.c_str(), name.size() + 1);
 
-    table[0].size = 0;
+    h->val = h->name + name.size() + 1;
+    memcpy(h->val, val.c_str(), val.size() + 1);
 
-    table[0].name = new(std::nothrow) char [name.size() + val.size() + 2];
-    if (!table[0].name)
-    {
-        table[0].val = NULL;
-        return -1;
-    }
-    memcpy(table[0].name, name.c_str(), name.size() + 1);
-
-    table[0].val = table[0].name + name.size() + 1;
-    memcpy(table[0].val, val.c_str(), val.size() + 1);
-
-    table[0].size = size;
+    h->size = size;
     ++headers_num;
     table_size += size;
 
+    h->next = list_start;
+    h->prev = NULL;
+    if (list_start)
+        list_start->prev = h;
+    if (list_end == NULL)
+        list_end = h;
+    list_start = h;
     return 0;
 }

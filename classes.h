@@ -4,86 +4,8 @@
 
 #include <iostream>
 #include "bytes_array.h"
+#include "globals.h"
 //======================================================================
-enum HTTP_METHOD
-{
-    M_NULL, M_GET, M_HEAD, M_POST, M_OPTIONS, M_PUT,
-    M_PATCH, M_DELETE, M_TRACE, M_CONNECT
-};
-
-struct Param
-{
-    std::string name;
-    std::string val;
-};
-
-enum HTTP2_ERRORS
-{
-    NO_ERROR,
-    PROTOCOL_ERROR,
-    INTERNAL_ERROR,
-    FLOW_CONTROL_ERROR,
-    SETTINGS_TIMEOUT,
-    STREAM_CLOSED,
-    FRAME_SIZE_ERROR,
-    REFUSED_STREAM,
-    CANCEL,
-    COMPRESSION_ERROR,
-    CONNECT_ERROR,
-    ENHANCE_YOUR_CALM,
-    INADEQUATE_SECURITY,
-    HTTP_1_1_REQUIRED,
-};
-
-enum FRAME_TYPE
-{
-    DATA,
-    HEADERS,
-    PRIORITY,
-    RST_STREAM,
-    SETTINGS,
-    PUSH_PROMISE,
-    PING,
-    GOAWAY,
-    WINDOW_UPDATE,
-    CONTINUATION,
-    ALTSVC,
-    ORIGIN = 0x0C,
-    CACHE_DIGEST = 0x0D,
-    PRIORITY_UPDATE = 0x10,
-};
-
-enum HTTP2_FLAGS
-{
-    FLAG_ACK = 0x1,
-    FLAG_END_STREAM = 0x1,
-    FLAG_END_HEADERS = 0x4,
-    FLAG_PADDED = 0x8,
-    FLAG_PRIORITY = 0x20
-};
-
-enum SOURCE_DATA
-{
-    NO_SOURCE,
-    DIRECTORY,
-    FROM_FILE,
-    FROM_DATA_BUFFER,
-    DYN_PAGE,
-};
-
-enum CGI_TYPE { CGI, PHPCGI, PHPFPM, FASTCGI, SCGI, };
-
-enum CGI_STATUS
-{
-    NO_CGI,
-    CGI_CREATE,
-    FASTCGI_BEGIN,
-    FASTCGI_PARAMS,
-    SCGI_PARAMS,
-    CGI_STDIN,
-    CGI_STDOUT,
-};
-
 struct VHost
 {
     VHost *next;
@@ -267,7 +189,7 @@ struct Stream
     VHost *vhost;
 
     int id;
-    FRAME_TYPE type;
+    HTTP2_FRAME_TYPE type;
     int flags;
     time_t Time;
 
@@ -452,21 +374,23 @@ private:
 //======================================================================
 struct Header
 {
-    char *name;
-    char *val;
+    Header *prev;
+    Header *next;
     int size;
+    char *val;
+    char name[];
 };
 //----------------------------------------------------------------------
 class DynamicTable
 {
-    Header *table;
-    
+    Header *list_start;
+    Header *list_end;
+
     int max_table_size;
     int table_size;
 
-    int max_headers_num;
     int headers_num;
-    
+
     int offset;
     int err;
 
@@ -476,43 +400,31 @@ class DynamicTable
 
 public:
 
-    DynamicTable(int size_, int offs)
+    DynamicTable(int size, int offs)
     {
-        max_table_size = size_;
-        max_headers_num = max_table_size/20;
+        list_start = list_end = NULL;
+        max_table_size = size;
         table_size = 0;
         offset = offs;
         headers_num = err = 0;
-        table = new(std::nothrow) Header [max_table_size];
-        if (!table)
-        {
-            fprintf(stderr, "<%s:%d> Error: %s\n", __func__, __LINE__, strerror(errno));
-            max_table_size = 0;
-            err = 1;
-            return;
-        }
 
         if (conf->PrintDebugMsg)
-            fprintf(stderr, "<%s:%d> table_size=%d, max_headers_num=%d, offset=%d\n", __func__, __LINE__, max_table_size, max_headers_num, offset);
-
-        table[0].name = NULL;
-        table[0].val = NULL;
+            fprintf(stderr, "<%s:%d> table_size=%d, offset=%d\n", __func__, __LINE__, max_table_size, offset);
     }
     //------------------------------------------------------------------
     ~DynamicTable()
     {
-        if (table)
+        if (list_start)
         {
             //fprintf(stderr, "<%s:%d> ~~~ Delete Dynamic Table\n", __func__, __LINE__);
-            for ( int i = 0; i < headers_num; ++i)
+            Header *h = list_start, *next = NULL;
+            for ( ; h; h = next)
             {
-                if (table[i].name && table[i].val)
-                {
-                    delete [] table[i].name;
-                }
+                next = h->next;
+                delete [] h;
             }
-            delete [] table;
-            table = NULL;
+
+            list_start = list_end = NULL;
         }
     }
     //------------------------------------------------------------------
@@ -521,9 +433,11 @@ public:
     void print()
     {
         fprintf(stderr, " -------- Dynamic table %d, size %d --------\n", headers_num, table_size);
-        for ( int i = 0; i < headers_num; ++i)
+        Header *h = list_start, *next = NULL;
+        for ( int i = offset; h; h = next, ++i)
         {
-            fprintf(stderr, " %04d  [%s: %s]\n", i + offset, table[i].name, table[i].val);
+            next = h->next;
+            fprintf(stderr, " %04d  [%s: %s]\n", i, h->name, h->val);
         }
     }
     //------------------------------------------------------------------
@@ -535,8 +449,331 @@ public:
             return NULL;
         }
 
-        return &table[n - offset];
+        if (list_start)
+        {
+            Header *h = list_start, *next = NULL;
+            for ( int i = offset; h; h = next, ++i)
+            {
+                next = h->next;
+                if (i == n)
+                    return h;
+            }
+        }
+
+        return NULL;
     }
+};
+//======================================================================
+struct http1
+{
+    enum HTTP1_STATUS {
+        SSL_ACCEPT = 1,
+        SSL_SHUTDOWN,
+        REDIRECT,
+        READ_REQUEST,
+        READ_POSTDATA,
+        SEND_RESP_HEADERS,
+        SEND_ENTITY,
+    } con_status;
+
+    Stream resp;
+    BytesArray hdrs;
+    CHUNK_MODE chunk_mode;
+    bool connKeepAlive;
+    bool try_again;
+    //------------------------------------------------------------------
+    http1()
+    {
+        connKeepAlive = true;
+        hdrs.init();
+        chunk_mode = NO_CHUNK;
+        try_again = false;
+    }
+    //------------------------------------------------------------------
+    void init()
+    {
+        resp.init();
+        //----------------------
+        hdrs.init();
+        chunk_mode = NO_CHUNK;
+    }
+    //------------------------------------------------------------------
+    const char *get_str_status()
+    {
+        switch (con_status)
+        {
+            case SSL_ACCEPT:
+                return "SSL_ACCEPT";
+            case REDIRECT:
+                return "REDIRECT";
+            case READ_REQUEST:
+                return "READ_REQUEST";
+            case READ_POSTDATA:
+                return "READ_POSTDATA";
+            case SEND_RESP_HEADERS:
+                return "SEND_RESP_HEADERS";
+            case SEND_ENTITY:
+                return "SEND_ENTITY";
+            case SSL_SHUTDOWN:
+                return "SSL_SHUTDOWN";
+        }
+
+        return "?";
+    }
+};
+//======================================================================
+struct http2
+{
+    enum HTTP2_STATUS
+    {
+        SSL_ACCEPT = 1,
+        PREFACE_MESSAGE,
+        SET_SETTINGS,
+        PROCESSING_REQUESTS,
+        SSL_SHUTDOWN,
+    } con_status;
+
+    Stream *start_stream;
+    Stream *end_stream;
+
+    Stream *work_stream;
+    //-----------------------
+    unsigned int body_len;
+    HTTP2_FRAME_TYPE type;
+    int flags;
+    int id;
+
+    unsigned int HTTP2_SendBufSize;
+
+    long init_window_size;
+    long connect_window_size;
+    long max_frame_size;
+    long cgi_window_update;
+    long cgi_window_size;
+
+    char header[9];
+    int header_len;
+
+    BytesArray body;
+    BytesArray goaway;
+    BytesArray ping;
+    BytesArray settings;
+    BytesArray frame_win_update;
+
+    bool try_again;
+    struct
+    {
+        Stream *stream;
+        int id;
+        HTTP2_FRAME_TYPE type;
+    } send_again;
+
+    DynamicTable *dyn_tab;
+
+    bool recv_settings;
+    bool recv_settings_ack;
+    bool send_settings_ack;
+    //----------------------
+    void init()
+    {
+        header_len = 0;
+        body.init();
+    }
+
+    http2();
+    ~http2();
+    Stream *add(unsigned long, unsigned long);
+    void del_from_list(Stream *r);
+    int close_stream(int id);
+    int set_window_size(int id, long n);
+    Stream *get(int id);
+    Stream *get();
+    int size();
+    int get_str(std::string& s, int *len);
+    int get_header(int ind, std::string& name, std::string& val, int *len);
+    int parse(Stream *r);
+    //------------------------------------------------------------------
+    const char *get_str_status()
+    {
+        switch (con_status)
+        {
+            case http2::SSL_ACCEPT:
+                return "SSL_ACCEPT";
+            case http2::PREFACE_MESSAGE:
+                return "PREFACE_MESSAGE";
+            case http2::SET_SETTINGS:
+                return "SET_SETTINGS";
+            case http2::PROCESSING_REQUESTS:
+                return "PROCESSING_REQUESTS";
+            case http2::SSL_SHUTDOWN:
+                return "SSL_SHUTDOWN";
+        }
+
+        return "?";
+    }
+    //------------------------------------------------------------------
+private:
+
+    int max_streams;    //SETTINGS_MAX_CONCURRENT_STREAMS (0x3)
+    int num_streams;
+    int err;
+
+    http2(const http2&);
+    http2& operator=(const http2&);
+};
+//======================================================================
+class Connect
+{
+    Connect(const Connect&){}
+    Connect& operator=(const Connect&);
+public:
+    Connect()
+    {
+        numReq = 1;
+        err = 0;
+        client_timer = 0;
+        fd_revents = 0;
+        tls.ssl = NULL;
+        tls.err = 0;
+        tls.poll_events = 0;
+        h1 = NULL;
+        h2 = NULL;
+        serv = NULL;
+    }
+
+    ~Connect()
+    {
+        if (h1)
+            delete h1;
+        if (h2)
+            delete h2;
+    }
+
+    Connect *prev;
+    Connect *next;
+
+    unsigned long numConn;
+    unsigned long numReq;
+
+    int serverSocket;
+    char remoteAddr[NI_MAXHOST];
+    char remotePort[NI_MAXSERV];
+
+    PROTOCOL Protocol;
+    const Server *serv;
+    bool SecureConnect;
+
+    int err;
+    std::string ServerPort;
+    int clientSocket;
+    time_t client_timer;
+    int fd_revents;
+
+    struct
+    {
+        SSL *ssl;
+        int err;
+        int poll_events;
+        time_t shutdown_timer;
+    } tls;
+
+    http1 *h1;
+    http2 *h2;
+};
+//======================================================================
+class EventHandlerClass
+{
+    std::mutex mtx_thr;
+    std::condition_variable cond_thr;
+
+    int num_poll, cgi_num_work;
+    int close_thr;
+    unsigned long num_request;
+
+    Connect **conn_array;
+    struct pollfd *poll_fd;
+    Stream **cgi_array;
+
+    Connect *work_list_start;
+    Connect *work_list_end;
+
+    Connect *wait_list_start;
+    Connect *wait_list_end;
+
+    char *snd_buf;
+
+    void del_from_list(Connect *c);
+    void worker(Connect *c);
+
+    int http1_worker(Connect *con, int revents);
+
+    int http2_connection(Connect *c);
+
+    int recv_frame(Connect *c);
+    int recv_frame_(Connect *c);
+    int parse_frame(Connect *c);
+
+    void send_frames(Connect *c);
+    int send_frames_(Connect *c);
+
+    int send_frame_settings(Connect *c);
+    int send_frame_headers(Connect *c, Stream *r);
+    int send_frame_data(Connect *c, Stream *r);
+    int send_window_update(Connect *c);
+    int send_window_update(Connect *c, Stream *r);
+    int send_frame_goawey(Connect *c);
+    int send_frame_ping(Connect *c);
+    int send_frame_rststream(Connect *c, Stream *r);
+
+    void http1_set_poll(Connect *c);
+    void http2_set_poll(Connect *c);
+    int http2_poll(Connect *c, int);
+
+    void cgi_worker(Connect *c, Stream *r, int i);
+    int cgi_create_proc(Connect *c, Stream *r);
+    int cgi_fork(Connect *c, Stream *r, int* serv_cgi, int* cgi_serv);
+    int cgi_stdin(Stream *r, int fd);
+    int cgi_stdout(Connect *c, Stream *r, int fd);
+
+    void http1_get_cgi_headers(Connect *c);
+    void http2_get_cgi_headers(Connect *c, Stream *r);
+
+    void cgi_worker(Connect *c, int i);
+    int cgi_stdout(Connect *c, int fd);
+
+    int scgi_worker(Connect *c, Stream *r, int i);
+
+    void fcgi_worker(Connect *c, Stream *r, int i);
+
+    void fcgi_worker(Connect *c, int i);
+
+    void http1_end_request(Connect *c);
+
+    int http1_cgi_set(Connect *c);
+    void http1_cgi_poll(Connect *c, int);
+    int http2_cgi_set(Connect *c);
+    void http2_cgi_poll(Connect *c, int);
+
+    void ssl_shutdown(Connect *c);
+    void close_connect(Connect *c);
+
+public:
+
+    EventHandlerClass();
+    ~EventHandlerClass();
+
+    void init();
+
+    int wait_connection();
+    void add_work_list();
+    int cgi_poll();
+    void set_poll();
+    int _poll();
+
+    void dec_all_cgi();
+    void push_wait_list(Connect *c);
+    void close_event_handler();
+    void close_connections();
 };
 
 #endif

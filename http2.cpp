@@ -3,6 +3,7 @@
 using namespace std;
 
 const bool huff_coding = true;
+const int hpack_mask = 0;
 //======================================================================
 void set_frame_headers(Stream *resp)
 {
@@ -551,10 +552,10 @@ static int set_response(Connect *c, Stream *resp)
             resp->buf.init();
         //------------- headers frame --------------
         set_frame_headers(resp);
-        add_header(resp, 8);                                          // "200 OK"
-        add_header(resp->headers, 54, conf->ServerSoftware.c_str());  // "server"
-        add_header(resp->headers, 33, get_time().c_str());            // "date"
-        add_header(resp->headers, 31, "text/html;charset=UTF-8");     // "content-type"
+        add_header(resp, 8);                                            // "200 OK"
+        add_header(resp->headers, 54, conf->ServerSoftware.c_str());    // "server"
+        add_header(resp->headers, 33, get_time().c_str());              // "date"
+        add_header(resp->headers, 31, "text/html;charset=UTF-8");       // "content-type"
         add_header(resp->headers, 24, "no-cache, no-store, must-revalidate");// "cache-control"
         resp->create_headers = true;
 
@@ -588,7 +589,7 @@ static int set_response(Connect *c, Stream *resp)
     return 0;
 }
 //======================================================================
-int set_send_again(Connect *c, Stream *stream, FRAME_TYPE type, int id)
+int set_send_again(Connect *c, Stream *stream, HTTP2_FRAME_TYPE type, int id)
 {
     if (c->h2->try_again == false)
     {
@@ -739,7 +740,7 @@ int EventHandlerClass::recv_frame_(Connect *c)
         {
             c->h2->body_len = ((unsigned char)c->h2->header[0]<<16) +
                 ((unsigned char)c->h2->header[1]<<8) + (unsigned char)c->h2->header[2];
-            c->h2->type = (FRAME_TYPE)c->h2->header[3];
+            c->h2->type = (HTTP2_FRAME_TYPE)c->h2->header[3];
             c->h2->flags = c->h2->header[4];
             c->h2->id = (((unsigned char)c->h2->header[5] & 0x7f)<<16) + ((unsigned char)c->h2->header[6]<<16) +
                 ((unsigned char)c->h2->header[7]<<8) + (unsigned char)c->h2->header[8];
@@ -1219,7 +1220,7 @@ int EventHandlerClass::send_frames_(Connect *c)
             if (ret <= 0)
                 return ret;
         }
-//print_err(resp, "<%s:%d> --- %lld ---\n", __func__, __LINE__, resp->send_bytes);
+
         c->h2->work_stream = resp->next;
     }
     else
@@ -1547,66 +1548,66 @@ int EventHandlerClass::send_window_update(Connect *c, Stream *resp)
 }
 //======================================================================
 const char *static_tab[][2] = {
-                         {"", ""},
-                         {":authority", ""},
-                         {":method", "GET"},
-                         {":method", "POST"},
-                         {":path", "/"},
-                         {":path", "/index.html"},
-                         {":scheme", "http"},
-                         {":scheme", "https"},
-                         {":status", "200"},
-                         {":status", "204"},
-                         {":status", "206"},
-                         {":status", "304"},
-                         {":status", "400"},
-                         {":status", "404"},
-                         {":status", "500"},
-                         {"accept-charset", ""},
-                         {"accept-encoding", "gzip, deflate"},
-                         {"accept-language", ""},
-                         {"accept-ranges", ""},
-                         {"accept", ""},
-                         {"access-control-allow-origin", ""},
-                         {"age", ""},
-                         {"allow", ""},
-                         {"authorization", ""},
-                         {"cache-control", ""},
-                         {"content-disposition", ""},
-                         {"content-encoding", ""},
-                         {"content-language", ""},
-                         {"content-length", ""},
-                         {"content-location", ""},
-                         {"content-range", ""},
-                         {"content-type", ""},
-                         {"cookie", ""},
-                         {"date", ""},
-                         {"etag", ""},
-                         {"expect", ""},
-                         {"expires", ""},
-                         {"from", ""},
-                         {"host", ""},
-                         {"if-match", ""},
-                         {"if-modified-since", ""},
-                         {"if-none-match", ""},
-                         {"if-range", ""},
-                         {"if-unmodified-since", ""},
-                         {"last-modified", ""},
-                         {"link", ""},
-                         {"location", ""},
-                         {"max-forwards", ""},
-                         {"proxy-authenticate", ""},
-                         {"proxy-authorization", ""},
-                         {"range", ""},
-                         {"referer", ""},
-                         {"refresh", ""},
-                         {"retry-after", ""},
-                         {"server", ""},
-                         {"set-cookie", ""},
-                         {"strict-transport-security", ""},
-                         {"transfer-encoding", ""},
-                         {"user-agent", ""},
-                         {"vary", ""},
-                         {"via", ""},
-                         {"www-authenticate", ""},
-                         {NULL, NULL}};
+    {"", ""},
+    {":authority", ""},
+    {":method", "GET"},
+    {":method", "POST"},
+    {":path", "/"},
+    {":path", "/index.html"},
+    {":scheme", "http"},
+    {":scheme", "https"},
+    {":status", "200"},
+    {":status", "204"},
+    {":status", "206"},
+    {":status", "304"},
+    {":status", "400"},
+    {":status", "404"},
+    {":status", "500"},
+    {"accept-charset", ""},
+    {"accept-encoding", "gzip, deflate"},
+    {"accept-language", ""},
+    {"accept-ranges", ""},
+    {"accept", ""},
+    {"access-control-allow-origin", ""},
+    {"age", ""},
+    {"allow", ""},
+    {"authorization", ""},
+    {"cache-control", ""},
+    {"content-disposition", ""},
+    {"content-encoding", ""},
+    {"content-language", ""},
+    {"content-length", ""},
+    {"content-location", ""},
+    {"content-range", ""},
+    {"content-type", ""},
+    {"cookie", ""},
+    {"date", ""},
+    {"etag", ""},
+    {"expect", ""},
+    {"expires", ""},
+    {"from", ""},
+    {"host", ""},
+    {"if-match", ""},
+    {"if-modified-since", ""},
+    {"if-none-match", ""},
+    {"if-range", ""},
+    {"if-unmodified-since", ""},
+    {"last-modified", ""},
+    {"link", ""},
+    {"location", ""},
+    {"max-forwards", ""},
+    {"proxy-authenticate", ""},
+    {"proxy-authorization", ""},
+    {"range", ""},
+    {"referer", ""},
+    {"refresh", ""},
+    {"retry-after", ""},
+    {"server", ""},
+    {"set-cookie", ""},
+    {"strict-transport-security", ""},
+    {"transfer-encoding", ""},
+    {"user-agent", ""},
+    {"vary", ""},
+    {"via", ""},
+    {"www-authenticate", ""},
+    {NULL, NULL}};

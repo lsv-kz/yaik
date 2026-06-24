@@ -4,7 +4,7 @@ CC = c++
 #CC = clang++ 
 # -fno-inline
 
-DEPS = main.h classes.h bytes_array.h
+DEPS = globals.h  main.h classes.h bytes_array.h
 
 OBJS = yaik.o \
 	huffman_code.o \
