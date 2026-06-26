@@ -377,14 +377,14 @@ struct Header
     Header *prev;
     Header *next;
     int size;
+    char *name;
     char *val;
-    char name[];
 };
 //----------------------------------------------------------------------
 class DynamicTable
 {
-    Header *list_start;
-    Header *list_end;
+    void *list_start;
+    void *list_end;
 
     int max_table_size;
     int table_size;
@@ -393,6 +393,8 @@ class DynamicTable
 
     int offset;
     int err;
+
+    int offs_buf;
 
     DynamicTable();
     DynamicTable(const DynamicTable&);
@@ -407,6 +409,7 @@ public:
         table_size = 0;
         offset = offs;
         headers_num = err = 0;
+        offs_buf = sizeof(Header);
 
         if (conf->PrintDebugMsg)
             fprintf(stderr, "<%s:%d> table_size=%d, offset=%d\n", __func__, __LINE__, max_table_size, offset);
@@ -417,7 +420,7 @@ public:
         if (list_start)
         {
             //fprintf(stderr, "<%s:%d> ~~~ Delete Dynamic Table\n", __func__, __LINE__);
-            Header *h = list_start, *next = NULL;
+            Header *h = (Header*)list_start, *next = NULL;
             for ( ; h; h = next)
             {
                 next = h->next;
@@ -433,11 +436,11 @@ public:
     void print()
     {
         fprintf(stderr, " -------- Dynamic table %d, size %d --------\n", headers_num, table_size);
-        Header *h = list_start, *next = NULL;
+        Header *h = (Header*)list_start, *next = NULL;
         for ( int i = offset; h; h = next, ++i)
         {
             next = h->next;
-            fprintf(stderr, " %04d  [%s: %s]\n", i, h->name, h->val);
+            fprintf(stderr, " %04d: %d [%s: %s]\n", i, h->size, h->name, h->val);
         }
     }
     //------------------------------------------------------------------
@@ -451,7 +454,7 @@ public:
 
         if (list_start)
         {
-            Header *h = list_start, *next = NULL;
+            Header *h = (Header*)list_start, *next = NULL;
             for ( int i = offset; h; h = next, ++i)
             {
                 next = h->next;

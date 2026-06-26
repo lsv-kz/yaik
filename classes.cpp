@@ -425,30 +425,50 @@ int http2::parse(Stream *r)
     {
         fprintf(stderr, "\n");
         if (dyn_tab)
+        {
             dyn_tab->print();
+            fprintf(stderr, "\n");
+        }
     }
     return 0;
 }
 //======================================================================
 int DynamicTable::add(std::string& name, std::string& val)
 {
-    int size = name.size() + val.size() + 32;
     if (max_table_size == 0)
         return 0;
+    int size = name.size() + val.size() + 32;
     while ((table_size + size) > max_table_size)
     {
-        --headers_num;
         if (list_end)
         {
-            table_size -= list_end->size;
-            Header *prev = list_end->prev;
-            delete list_end;
+            --headers_num;
+            Header *end = (Header*)list_end;
+            if (table_size < end->size)
+            {
+                fprintf(stderr, "<%s:%d> table_size(%d) < end->size(%d)\n", __func__, __LINE__,
+                        table_size, end->size);
+                return -1;
+            }
+
+            table_size -= end->size;
+            Header *prev = end->prev;
+            delete [] (char*)list_end;
             list_end = prev;
-            list_end->next = NULL;
+            if (list_end)
+            {
+                Header *end = (Header*)list_end;
+                end->next = NULL;
+            }
+            else
+            {
+                list_start = list_end;
+            }
         }
         else
         {
-            fprintf(stderr, "<%s:%d> ??? Error\n", __func__, __LINE__);
+            fprintf(stderr, "<%s:%d> Error size header(%d) > max_table_size(%d)\n", __func__, __LINE__,
+                        size, max_table_size);
             return -1;
         }
     }
@@ -461,21 +481,24 @@ int DynamicTable::add(std::string& name, std::string& val)
     }
 
     Header *h = (Header*)buf;
+    h->prev = NULL;
+    h->next = (Header*)list_start;
+    h->size = size;
+    h->name = buf + offs_buf;
+    h->val = buf + offs_buf + name.size() + 1;
     memcpy(h->name, name.c_str(), name.size() + 1);
-
-    h->val = h->name + name.size() + 1;
     memcpy(h->val, val.c_str(), val.size() + 1);
 
-    h->size = size;
     ++headers_num;
     table_size += size;
 
-    h->next = list_start;
-    h->prev = NULL;
     if (list_start)
-        list_start->prev = h;
+    {
+        Header *start = (Header*)list_start;
+        start->prev = (Header*)buf;
+    }
     if (list_end == NULL)
-        list_end = h;
-    list_start = h;
+        list_end = buf;
+    list_start = buf;
     return 0;
 }
