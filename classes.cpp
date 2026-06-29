@@ -484,8 +484,8 @@ int DynamicTable::add(std::string& name, std::string& val)
     h->prev = NULL;
     h->next = (Header*)list_start;
     h->size = size;
-    h->name = buf + offs_buf;
-    h->val = buf + offs_buf + name.size() + 1;
+    h->name = buf + offs_name;
+    h->val = buf + offs_name + name.size() + 1;
     memcpy(h->name, name.c_str(), name.size() + 1);
     memcpy(h->val, val.c_str(), val.size() + 1);
 

@@ -160,23 +160,23 @@ public:
     //------------------------------------------------------------------
     int strcpy(const char *s)
     {
-        if ((s == NULL) || err)
+        if (err)
             return -1;
+        buf_len = offset = 0;
+        if (s == NULL)
+            return 0;
         unsigned int len = strlen(s);
         if (len)
             return ncpy(s, len);
-        else
-        {
-            buf_len = 0;
-            offset = 0;
-            return 0;
-        }
+        return 0;
     }
     //------------------------------------------------------------------
     int strcat(const char *s)
     {
-        if ((s == NULL) || err)
+        if (err)
             return -1;
+        if (s == NULL)
+            return 0;
         unsigned int len = strlen(s);
         if (len)
             return ncat(s, len);

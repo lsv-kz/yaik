@@ -388,13 +388,9 @@ class DynamicTable
 
     int max_table_size;
     int table_size;
-
     int headers_num;
-
     int offset;
-    int err;
-
-    int offs_buf;
+    int offs_name;
 
     DynamicTable();
     DynamicTable(const DynamicTable&);
@@ -408,8 +404,8 @@ public:
         max_table_size = size;
         table_size = 0;
         offset = offs;
-        headers_num = err = 0;
-        offs_buf = sizeof(Header);
+        headers_num = 0;
+        offs_name = sizeof(Header);
 
         if (conf->PrintDebugMsg)
             fprintf(stderr, "<%s:%d> table_size=%d, offset=%d\n", __func__, __LINE__, max_table_size, offset);

@@ -207,6 +207,8 @@ void accept_connect()
                     else if (ret == -1)
                     {
                         run = false;
+                        shutdown(clientSocket, SHUT_RDWR);
+                        close(clientSocket);
                         break;
                     }
                 }
@@ -304,24 +306,9 @@ void accept_connect()
                             close_connect(c);
                         }
                     }
-                    else if (c->Protocol == P_HTTP1)
-                    {
-                        c->h1 = new(nothrow) http1;
-                        if (c->h1)
-                        {
-                            c->h1->con_status = http1::READ_REQUEST;
-                            delete_from_list(c);
-                            push_wait_list(c);
-                        }
-                        else
-                        {
-                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-                            close_connect(c);
-                        }
-                    }
                     else
                     {
-                        print_err(c, "<%s:%d> Error Protocol\n", __func__, __LINE__);
+                        print_err(c, "<%s:%d> Error Protocol: %d\n", __func__, __LINE__, get_str_protocol(c->Protocol));
                         close_connect(c);
                     }
                 }
@@ -357,9 +344,7 @@ int create_connect(const Server *serv,
     if (!con)
     {
         print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-        shutdown(clientSocket, SHUT_RDWR);
-        close(clientSocket);
-        return 0;
+        return -1;
     }
 
     con->numConn = ++(*allConn);
@@ -368,6 +353,7 @@ int create_connect(const Server *serv,
     if (ioctl(clientSocket, FIONBIO, &flags) == -1)
     {
         print_err("<%s:%d> Error ioctl(, FIONBIO, 1): %s\n", __func__, __LINE__, strerror(errno));
+        delete con;
         return -1;
     }
 
@@ -375,6 +361,7 @@ int create_connect(const Server *serv,
     if (flags == -1)
     {
         print_err("<%s:%d> Error fcntl(, F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
+        delete con;
         return -1;
     }
 
@@ -382,6 +369,7 @@ int create_connect(const Server *serv,
     if (fcntl(clientSocket, F_SETFD, flags) == -1)
     {
         print_err("<%s:%d> Error fcntl(, F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
+        delete con;
         return -1;
     }
 
@@ -401,10 +389,6 @@ int create_connect(const Server *serv,
         print_err(con, "<%s:%d> Error getnameinfo()=%d: %s\n", __func__, __LINE__, err, gai_strerror(err));
         con->remoteAddr[0] = 0;
         con->remotePort[0] = 0;
-        shutdown(clientSocket, SHUT_RDWR);
-        close(clientSocket);
-        delete con;
-        return 0;
     }
 
     con->serv = serv;
@@ -416,8 +400,6 @@ int create_connect(const Server *serv,
         if (!con->tls.ssl)
         {
             print_err(con, "<%s:%d> Error SSL_new()\n", __func__, __LINE__);
-            shutdown(clientSocket, SHUT_RDWR);
-            close(clientSocket);
             delete con;
             return -1;
         }
@@ -428,10 +410,8 @@ int create_connect(const Server *serv,
             con->tls.err = SSL_get_error(con->tls.ssl, ret);
             print_err(con, "<%s:%d> Error SSL_set_fd(): %s\n", __func__, __LINE__, ssl_strerror(con->tls.err));
             SSL_free(con->tls.ssl);
-            shutdown(clientSocket, SHUT_RDWR);
-            close(clientSocket);
             delete con;
-            return 0;
+            return -1;
         }
 
         con->tls.poll_events = POLLIN | POLLOUT;
@@ -456,8 +436,6 @@ int create_connect(const Server *serv,
         else
         {
             print_err(con, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-            shutdown(clientSocket, SHUT_RDWR);
-            close(clientSocket);
             delete con;
             return -1;
         }

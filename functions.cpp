@@ -172,6 +172,19 @@ const char *get_str_method(int i)
     return "";
 }
 //======================================================================
+const char *get_str_protocol(PROTOCOL p)
+{
+    switch (p)
+    {
+        case P_HTTP1:
+            return "HTTP1";
+        case P_HTTP2:
+            return "HTTP2";
+    }
+
+    return "Protocol unknown";
+}
+//======================================================================
 const char *get_str_frame_type(HTTP2_FRAME_TYPE t)
 {
     switch (t)

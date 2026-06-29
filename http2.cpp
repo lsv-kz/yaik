@@ -910,17 +910,8 @@ int EventHandlerClass::parse_frame(Connect *c)
         }
         else
             p_buf = c->h2->body.ptr();
-        if (conf->PrintDebugMsg)
-        {
-            if (body_len < 100)
-            {
-                print_err(resp, "<%s:%d> recv DATA %d, con.cgi_window_size=%ld, stream.cgi_window_size=%ld, id=%d \n",
-                                __func__, __LINE__, body_len, c->h2->cgi_window_size, resp->cgi.window_size, resp->id);
-            }
-        }
 
         resp->post_content_len -= body_len;
-
         c->h2->cgi_window_size -= body_len;
         resp->cgi.window_size -= body_len;
 

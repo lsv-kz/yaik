@@ -3,7 +3,6 @@
 #define _FILE_OFFSET_BITS 64
 
 #include <iostream>
-#include <fstream>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -105,6 +104,7 @@ int int_to_bytes(BytesArray& buf, int data, int pref_len, int mask);
 
 HTTP_METHOD get_int_method(const char *s);
 const char *get_str_method(int i);
+const char *get_str_protocol(PROTOCOL p);
 const char *get_str_frame_type(HTTP2_FRAME_TYPE);
 const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_status(CGI_STATUS s);

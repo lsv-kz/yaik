@@ -13,7 +13,7 @@ Tested on OS: Debian, OpenBSD, FreeBSD
  * PHP-FPM
  * SCGI
 
-### HTTP2: 
+### HTTP2:
  * ALPN
  * Stream flow control
  * Dynamic Table of Header Fields
