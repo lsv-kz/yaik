@@ -108,7 +108,7 @@ int EventHandlerClass::cgi_poll()
         next = c->next;
         if (c->Protocol == P_HTTP1)
         {
-            if ((c->h1->con_status < http1::READ_POSTDATA) ||
+            if ((c->h1->con_status < READ_POSTDATA) ||
                 (c->h1->resp.source_data != DYN_PAGE) ||
                 c->h1->resp.cgi.end
             )
@@ -122,7 +122,7 @@ int EventHandlerClass::cgi_poll()
         else if (c->Protocol == P_HTTP2)
         {
             if ((c->h2->try_again == true) ||
-                (c->h2->con_status != http2::PROCESSING_REQUESTS) ||
+                (c->h2->con_status != PROCESSING_REQUESTS) ||
                 (c->h2->start_stream == NULL)
             )
             {
@@ -530,13 +530,13 @@ void EventHandlerClass::http1_set_poll(Connect *c)
     if (c->client_timer == 0)
         c->client_timer = t;
 
-    if ((c->h1->con_status == http1::READ_REQUEST) && (c->numReq > 1))
+    if ((c->h1->con_status == READ_REQUEST) && (c->numReq > 1))
         Timeout = conf->TimeoutKeepAlive;
 
     if ((t - c->client_timer) >= Timeout)
     {
         print_err(c, "<%s:%d> Timeout=%ld, %s\n", __func__, __LINE__, t - c->client_timer, c->h1->get_str_status());
-        if (c->h1->con_status == http1::SSL_SHUTDOWN)
+        if (c->h1->con_status == HTTP1_SHUTDOWN)
             close_connect(c);
         else
         {
@@ -556,7 +556,7 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                     print_err(c, "<%s:%d> ***** SSL_pending()=%d, %s\n", __func__, __LINE__, pending, c->h1->get_str_status());
                 }
 
-                if (c->h1->con_status == http1::READ_REQUEST)
+                if (c->h1->con_status == READ_REQUEST)
                 {
                     ret = http1_worker(c, POLLIN);
                     if (ret < 0)
@@ -591,22 +591,22 @@ void EventHandlerClass::http1_set_poll(Connect *c)
         }
 
         poll_fd[num_poll].events = 0;
-        if (c->h1->con_status == http1::READ_REQUEST)
+        if (c->h1->con_status == READ_REQUEST)
         {
             poll_fd[num_poll].fd = c->clientSocket;
             poll_fd[num_poll].events = POLLIN;
         }
-        else if ((c->h1->con_status == http1::READ_POSTDATA) && (c->h1->resp.post_data.size() <= 32768))
+        else if ((c->h1->con_status == READ_POSTDATA) && (c->h1->resp.post_data.size() <= 32768))
         {
             poll_fd[num_poll].fd = c->clientSocket;
             poll_fd[num_poll].events = POLLIN;
         }
-        else if ((c->h1->con_status == http1::SEND_RESP_HEADERS) && c->h1->resp.headers.size_remain())
+        else if ((c->h1->con_status == SEND_RESP_HEADERS) && c->h1->resp.headers.size_remain())
         {
             poll_fd[num_poll].fd = c->clientSocket;
             poll_fd[num_poll].events = POLLOUT;
         }
-        else if (c->h1->con_status == http1::SEND_ENTITY)
+        else if (c->h1->con_status == SEND_ENTITY)
         {
             if (((c->h1->resp.source_data == DYN_PAGE) && c->h1->resp.send_data.size_remain()) ||
                  (c->h1->resp.source_data != DYN_PAGE)
@@ -616,7 +616,7 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                 poll_fd[num_poll].events = POLLOUT;
             }
         }
-        else if (c->h1->con_status == http1::SSL_SHUTDOWN)
+        else if (c->h1->con_status == HTTP1_SHUTDOWN)
         {
             if (c->tls.shutdown_timer == 0)
                 c->tls.shutdown_timer = t;
@@ -632,9 +632,9 @@ void EventHandlerClass::http1_set_poll(Connect *c)
                 poll_fd[num_poll].events = c->tls.poll_events;
             }
         }
-        else if (c->h1->con_status == http1::REDIRECT)
+        else if (c->h1->con_status == REDIRECT)
         {
-            c->h1->con_status = http1::SEND_RESP_HEADERS;
+            c->h1->con_status = SEND_RESP_HEADERS;
             c->h1->resp.resp_status = RS301;
             c->h1->hdrs.strcpy("Location: ");
             c->h1->hdrs.ncat(c->serv->redirect.c_str(), c->serv->redirect.size());
@@ -660,7 +660,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
     if ((t - c->client_timer) >= conf->Timeout)
     {
         print_err(c, "<%s:%d> Timeout=%ld, %s\n", __func__, __LINE__, t - c->client_timer, c->h2->get_str_status());
-        if (c->h2->con_status == http2::SSL_SHUTDOWN)
+        if (c->h2->con_status == HTTP2_SHUTDOWN)
             close_connect(c);
         else
             ssl_shutdown(c);
@@ -676,7 +676,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                             pending, c->h2->get_str_status());
             }
 
-            if ((c->h2->con_status == http2::SET_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
+            if ((c->h2->con_status == SET_SETTINGS) || (c->h2->con_status == PROCESSING_REQUESTS))
             {
                 if (c->h2->goaway.size())
                 {
@@ -687,7 +687,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
                 if ((ret = recv_frame(c)) < 0)
                     break;
             }
-            else if ((c->h2->con_status == http2::PREFACE_MESSAGE) || (c->h2->con_status == http2::SSL_SHUTDOWN))
+            else if ((c->h2->con_status == PREFACE_MESSAGE) || (c->h2->con_status == HTTP2_SHUTDOWN))
             {
                 if ((ret = http2_connection(c)) < 0)
                     break;
@@ -702,7 +702,7 @@ void EventHandlerClass::http2_set_poll(Connect *c)
 
         poll_fd[num_poll].fd = c->clientSocket;
         poll_fd[num_poll].events = 0;
-        if (c->h2->con_status == http2::SSL_SHUTDOWN)
+        if (c->h2->con_status == HTTP2_SHUTDOWN)
         {
             if (c->tls.shutdown_timer == 0)
                 c->tls.shutdown_timer = t;
@@ -715,9 +715,9 @@ void EventHandlerClass::http2_set_poll(Connect *c)
             else
                 poll_fd[num_poll].events = c->tls.poll_events;
         }
-        else if (c->h2->con_status == http2::PREFACE_MESSAGE)
+        else if (c->h2->con_status == PREFACE_MESSAGE)
             poll_fd[num_poll].events = POLLIN;
-        else if (c->h2->con_status == http2::SET_SETTINGS)
+        else if (c->h2->con_status == SET_SETTINGS)
         {
             poll_fd[num_poll].events = POLLIN;
             if (c->h2->settings.size_remain() || c->h2->goaway.size_remain())
@@ -829,7 +829,7 @@ int EventHandlerClass::http2_poll(Connect *c, int conn_ind)
     if (revents & ((~POLLIN) & (~POLLOUT)))
     {
         print_err(c, "<%s:%d> !!! Error: events=0x%02x, revents=0x%02x, %s\n", __func__, __LINE__, poll_fd[conn_ind].events, revents, c->h2->get_str_status());
-        if (c->h2->con_status == http2::SSL_SHUTDOWN)
+        if (c->h2->con_status == HTTP2_SHUTDOWN)
         {
             close_connect(c);
         }
@@ -853,12 +853,12 @@ int EventHandlerClass::http2_poll(Connect *c, int conn_ind)
     c->fd_revents = revents;
     if (poll_fd[conn_ind].revents & POLLIN)
     {
-        if ((c->h2->con_status == http2::PREFACE_MESSAGE) || (c->h2->con_status == http2::SSL_SHUTDOWN))
+        if ((c->h2->con_status == PREFACE_MESSAGE) || (c->h2->con_status == HTTP2_SHUTDOWN))
         {
             if (http2_connection(c) < 0)
                 return -1;
         }
-        else if ((c->h2->con_status == http2::SET_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
+        else if ((c->h2->con_status == SET_SETTINGS) || (c->h2->con_status == PROCESSING_REQUESTS))
         {
             if (recv_frame(c) < 0)
                 return -1;
@@ -867,11 +867,11 @@ int EventHandlerClass::http2_poll(Connect *c, int conn_ind)
 
     if (poll_fd[conn_ind].revents & POLLOUT)
     {
-        if (c->h2->con_status == http2::SSL_SHUTDOWN)
+        if (c->h2->con_status == HTTP2_SHUTDOWN)
         {
             http2_connection(c);
         }
-        else if ((c->h2->con_status == http2::SET_SETTINGS) || (c->h2->con_status == http2::PROCESSING_REQUESTS))
+        else if ((c->h2->con_status == SET_SETTINGS) || (c->h2->con_status == PROCESSING_REQUESTS))
         {
             send_frames(c);
         }
@@ -912,9 +912,9 @@ void EventHandlerClass::ssl_shutdown(Connect *c)
         if ((c->tls.err != SSL_ERROR_SSL) && (c->tls.err != SSL_ERROR_SYSCALL))
         {
             if (c->Protocol == P_HTTP2)
-                c->h2->con_status = http2::SSL_SHUTDOWN;
+                c->h2->con_status = HTTP2_SHUTDOWN;
             else if (c->Protocol == P_HTTP1)
-                c->h1->con_status = http1::SSL_SHUTDOWN;
+                c->h1->con_status = HTTP1_SHUTDOWN;
             c->client_timer = 0;
             c->tls.shutdown_timer = 0;
             for ( int i = 0; i < 2; ++i)

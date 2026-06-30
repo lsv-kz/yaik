@@ -465,15 +465,7 @@ public:
 //======================================================================
 struct http1
 {
-    enum HTTP1_STATUS {
-        SSL_ACCEPT = 1,
-        SSL_SHUTDOWN,
-        REDIRECT,
-        READ_REQUEST,
-        READ_POSTDATA,
-        SEND_RESP_HEADERS,
-        SEND_ENTITY,
-    } con_status;
+    HTTP1_STATUS con_status;
 
     Stream resp;
     BytesArray hdrs;
@@ -501,8 +493,6 @@ struct http1
     {
         switch (con_status)
         {
-            case SSL_ACCEPT:
-                return "SSL_ACCEPT";
             case REDIRECT:
                 return "REDIRECT";
             case READ_REQUEST:
@@ -513,8 +503,8 @@ struct http1
                 return "SEND_RESP_HEADERS";
             case SEND_ENTITY:
                 return "SEND_ENTITY";
-            case SSL_SHUTDOWN:
-                return "SSL_SHUTDOWN";
+            case HTTP1_SHUTDOWN:
+                return "HTTP1_SHUTDOWN";
         }
 
         return "?";
@@ -523,14 +513,7 @@ struct http1
 //======================================================================
 struct http2
 {
-    enum HTTP2_STATUS
-    {
-        SSL_ACCEPT = 1,
-        PREFACE_MESSAGE,
-        SET_SETTINGS,
-        PROCESSING_REQUESTS,
-        SSL_SHUTDOWN,
-    } con_status;
+    HTTP2_STATUS con_status;
 
     Stream *start_stream;
     Stream *end_stream;
@@ -596,16 +579,14 @@ struct http2
     {
         switch (con_status)
         {
-            case http2::SSL_ACCEPT:
-                return "SSL_ACCEPT";
-            case http2::PREFACE_MESSAGE:
+            case PREFACE_MESSAGE:
                 return "PREFACE_MESSAGE";
-            case http2::SET_SETTINGS:
+            case SET_SETTINGS:
                 return "SET_SETTINGS";
-            case http2::PROCESSING_REQUESTS:
+            case PROCESSING_REQUESTS:
                 return "PROCESSING_REQUESTS";
-            case http2::SSL_SHUTDOWN:
-                return "SSL_SHUTDOWN";
+            case HTTP2_SHUTDOWN:
+                return "HTTP2_SHUTDOWN";
         }
 
         return "?";

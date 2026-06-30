@@ -296,7 +296,22 @@ void accept_connect()
                         c->h2 = new(nothrow) http2;
                         if (c->h2)
                         {
-                            c->h2->con_status = http2::PREFACE_MESSAGE;
+                            c->h2->con_status = PREFACE_MESSAGE;
+                            delete_from_list(c);
+                            push_wait_list(c);
+                        }
+                        else
+                        {
+                            print_err(c, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+                            close_connect(c);
+                        }
+                    }
+                    else if (c->Protocol == P_HTTP1)
+                    {
+                        c->h1 = new(nothrow) http1;
+                        if (c->h1)
+                        {
+                            c->h1->con_status = READ_REQUEST;
                             delete_from_list(c);
                             push_wait_list(c);
                         }
@@ -426,9 +441,9 @@ int create_connect(const Server *serv,
         if (con->h1)
         {
             if (serv->redirect.size())
-                con->h1->con_status = http1::REDIRECT;
+                con->h1->con_status = REDIRECT;
             else
-                con->h1->con_status = http1::READ_REQUEST;
+                con->h1->con_status = READ_REQUEST;
             con->h1->resp.numConn = con->numConn;
             start_conn();
             push_wait_list(con);

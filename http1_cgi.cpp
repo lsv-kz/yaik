@@ -162,7 +162,7 @@ void EventHandlerClass::cgi_worker(Connect *con, int cgi_ind_poll)
             else
             {
                 if (con->h1->resp.post_content_len <= 0)
-                    con->h1->con_status = http1::SEND_RESP_HEADERS;
+                    con->h1->con_status = SEND_RESP_HEADERS;
             }
         }
         else if (revents)

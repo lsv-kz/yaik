@@ -191,7 +191,7 @@ void EventHandlerClass::fcgi_worker(Connect *c, int cgi_ind_poll)
             if (c->h1->resp.post_content_len <= 0)
             {
                 c->h1->resp.cgi_status = CGI_STDOUT;
-                c->h1->con_status = http1::SEND_RESP_HEADERS;
+                c->h1->con_status = SEND_RESP_HEADERS;
                 c->h1->resp.cgi.fcgiContentLen = 0;
                 c->h1->resp.cgi.fcgiPaddingLen = 0;
             }

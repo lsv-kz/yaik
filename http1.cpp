@@ -213,7 +213,7 @@ static int set_response(Connect *c)
 //======================================================================
 int EventHandlerClass::http1_worker(Connect *c, int revents)
 {
-    if ((c->h1->con_status == http1::READ_REQUEST) && (revents & POLLIN))
+    if ((c->h1->con_status == READ_REQUEST) && (revents & POLLIN))
     {
         int ret = read_request_headers(c);
         if (ret == 1)
@@ -232,13 +232,13 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             if (c->h1->resp.source_data == DYN_PAGE)
             {
                 if (c->h1->resp.post_content_len > 0)
-                    c->h1->con_status = http1::READ_POSTDATA;
+                    c->h1->con_status = READ_POSTDATA;
                 else
-                    c->h1->con_status = http1::SEND_RESP_HEADERS;
+                    c->h1->con_status = SEND_RESP_HEADERS;
             }
             else
             {
-                c->h1->con_status = http1::SEND_RESP_HEADERS;
+                c->h1->con_status = SEND_RESP_HEADERS;
             }
         }
         else if (ret == 0)
@@ -257,7 +257,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                 print_err(c, "<%s:%d> read_request_headers()=ERR_TRY_AGAIN\n", __func__, __LINE__);
         }
     }
-    else if ((c->h1->con_status == http1::READ_POSTDATA) && (revents & POLLIN))
+    else if ((c->h1->con_status == READ_POSTDATA) && (revents & POLLIN))
     {
         int ret = read_post_data(c);
         if (ret <= 0)
@@ -276,7 +276,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                 print_err(c, "<%s:%d> read_post_data()=ERR_TRY_AGAIN\n", __func__, __LINE__);
         }
     }
-    else if ((c->h1->con_status == http1::SEND_RESP_HEADERS) && (revents & POLLOUT))
+    else if ((c->h1->con_status == SEND_RESP_HEADERS) && (revents & POLLOUT))
     {
         if (c->h1->resp.headers.size_remain())
         {
@@ -309,12 +309,12 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
                     if (c->h1->resp.resp_content_len == 0)
                         http1_end_request(c);
                     else
-                        c->h1->con_status = http1::SEND_ENTITY;
+                        c->h1->con_status = SEND_ENTITY;
                 }
             }
         }
     }
-    else if ((c->h1->con_status == http1::SEND_ENTITY) && (revents & POLLOUT))
+    else if ((c->h1->con_status == SEND_ENTITY) && (revents & POLLOUT))
     {
         int write_bytes = 0;
         if (c->h1->resp.source_data == FROM_FILE)
@@ -416,7 +416,7 @@ int EventHandlerClass::http1_worker(Connect *c, int revents)
             }
         }
     }
-    else if (c->h1->con_status == http1::SSL_SHUTDOWN)
+    else if (c->h1->con_status == HTTP1_SHUTDOWN)
     {
         ERR_clear_error();
         char buf[256];
@@ -530,7 +530,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
                 return;
         }
 
-        if (c->h1->con_status > http1::READ_REQUEST)
+        if (c->h1->con_status > READ_REQUEST)
         {
             print_log(c);
         }
@@ -549,7 +549,7 @@ void EventHandlerClass::http1_end_request(Connect *c)
         print_log(c);
         c->h1->init();
         ++c->numReq;
-        c->h1->con_status = http1::READ_REQUEST;
+        c->h1->con_status = READ_REQUEST;
     }
 }
 //======================================================================
@@ -945,7 +945,7 @@ int send_message(Connect *c, const char *msg)
     }
 
     c->h1->chunk_mode = NO_CHUNK;
-    c->h1->con_status = http1::SEND_RESP_HEADERS;
+    c->h1->con_status = SEND_RESP_HEADERS;
     c->h1->resp.source_data = FROM_DATA_BUFFER;
     if (create_response_headers(c) < 0)
         return -1;

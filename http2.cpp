@@ -618,7 +618,7 @@ int set_send_again(Connect *c, Stream *stream, HTTP2_FRAME_TYPE type, int id)
 //======================================================================
 int EventHandlerClass::http2_connection(Connect *c)
 {
-    if (c->h2->con_status == http2::PREFACE_MESSAGE)
+    if (c->h2->con_status == PREFACE_MESSAGE)
     {
         char buf[25];
 
@@ -636,7 +636,7 @@ int EventHandlerClass::http2_connection(Connect *c)
             if (conf->PrintDebugMsg)
                 hex_print_stderr(__func__, __LINE__, buf, 24);
             c->client_timer = 0;
-            c->h2->con_status = http2::SET_SETTINGS;
+            c->h2->con_status = SET_SETTINGS;
             c->h2->init();
             c->tls.poll_events = POLLOUT;
         }
@@ -653,7 +653,7 @@ int EventHandlerClass::http2_connection(Connect *c)
         }
         return 0;
     }
-    else if (c->h2->con_status == http2::SSL_SHUTDOWN)
+    else if (c->h2->con_status == HTTP2_SHUTDOWN)
     {
         ERR_clear_error();
         char buf[256];
@@ -851,7 +851,7 @@ int EventHandlerClass::parse_frame(Connect *c)
                     print_err(c, "recv SETTINGS flag=ACK\n");
                 c->h2->recv_settings_ack = true;
                 if (c->h2->send_settings_ack)
-                    c->h2->con_status = http2::PROCESSING_REQUESTS;
+                    c->h2->con_status = PROCESSING_REQUESTS;
             }
             else
             {
@@ -1095,7 +1095,7 @@ void EventHandlerClass::send_frames(Connect *c)
 //======================================================================
 int EventHandlerClass::send_frames_(Connect *c)
 {
-    if (c->h2->con_status == http2::SET_SETTINGS)
+    if (c->h2->con_status == SET_SETTINGS)
     {
         if (c->h2->goaway.size_remain())
             return send_frame_goawey(c);
@@ -1108,7 +1108,7 @@ int EventHandlerClass::send_frames_(Connect *c)
 
         return send_frame_settings(c);
     }
-    else if (c->h2->con_status == http2::PROCESSING_REQUESTS)
+    else if (c->h2->con_status == PROCESSING_REQUESTS)
     {
         if (c->h2->try_again)
         {
@@ -1384,7 +1384,7 @@ int EventHandlerClass::send_frame_settings(Connect *c)
         c->h2->send_settings_ack = true;
         c->h2->settings.init();
         if (c->h2->recv_settings_ack)
-            c->h2->con_status = http2::PROCESSING_REQUESTS;
+            c->h2->con_status = PROCESSING_REQUESTS;
     }
     else
     {
